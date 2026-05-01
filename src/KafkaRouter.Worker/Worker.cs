@@ -1,3 +1,5 @@
+using Confluent.Kafka;
+using KafkaRouter.Worker.Kafka;
 using KafkaRouter.Worker.Options;
 using Microsoft.Extensions.Options;
 
@@ -6,41 +8,63 @@ namespace KafkaRouter.Worker;
 public sealed class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
-    private readonly WorkerOptions _options;
+    private readonly IKafkaMessageConsumer _kafkaMessageConsumer;
+    private readonly WorkerOptions _workerOptions;
 
     public Worker(
         ILogger<Worker> logger,
-        IOptions<WorkerOptions> options)
+        IKafkaMessageConsumer kafkaMessageConsumer,
+        IOptions<WorkerOptions> workerOptions)
     {
         _logger = logger;
-        _options = options.Value;
+        _kafkaMessageConsumer = kafkaMessageConsumer;
+        _workerOptions = workerOptions.Value;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Kafka Router Worker avviato.");
-        _logger.LogInformation(
-            "Delay configurato: {DelayInSeconds} secondi.",
-            _options.DelayInSeconds);
 
-        var executionNumber = 0;
+        _kafkaMessageConsumer.Subscribe();
 
         try
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                executionNumber++;
+                try
+                {
+                    var consumeResult = _kafkaMessageConsumer.Consume(stoppingToken);
 
-                _logger.LogInformation(
-                    "Esecuzione numero {ExecutionNumber}. Il worker è vivo.",
-                    executionNumber);
+                    LogConsumedMessage(consumeResult);
 
-                await Task.Delay(
-                    TimeSpan.FromSeconds(_options.DelayInSeconds),
-                    stoppingToken);
+                    /*
+                     * Per ora il processamento è semplicemente:
+                     * "ho letto il messaggio e l'ho scritto nei log".
+                     *
+                     * Quindi possiamo committare.
+                     *
+                     * Nelle prossime lezioni il commit avverrà solo dopo:
+                     * - validazione JSON
+                     * - routing verso N topic
+                     * - eventuale scrittura audit su MongoDB
+                     * - gestione DLQ se necessaria
+                     */
+                    _kafkaMessageConsumer.Commit(consumeResult);
+                }
+                catch (ConsumeException exception)
+                {
+                    _logger.LogError(
+                        exception,
+                        "Errore durante la lettura da Kafka. Attendo {DelayInSeconds} secondi prima di riprovare.",
+                        _workerOptions.ErrorDelayInSeconds);
+
+                    await Task.Delay(
+                        TimeSpan.FromSeconds(_workerOptions.ErrorDelayInSeconds),
+                        stoppingToken);
+                }
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
             _logger.LogInformation("Richiesta di arresto ricevuta.");
         }
@@ -48,5 +72,23 @@ public sealed class Worker : BackgroundService
         {
             _logger.LogInformation("Kafka Router Worker arrestato correttamente.");
         }
+    }
+
+    private void LogConsumedMessage(ConsumeResult<string, string> consumeResult)
+    {
+        _logger.LogInformation(
+            """
+            Messaggio Kafka ricevuto.
+            Topic: {Topic}
+            Partition: {Partition}
+            Offset: {Offset}
+            Key: {Key}
+            Value: {Value}
+            """,
+            consumeResult.Topic,
+            consumeResult.Partition.Value,
+            consumeResult.Offset.Value,
+            consumeResult.Message.Key,
+            consumeResult.Message.Value);
     }
 }
