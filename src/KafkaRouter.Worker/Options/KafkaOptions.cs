@@ -8,6 +8,8 @@ public sealed class KafkaOptions
 
     public string InputTopic { get; init; } = string.Empty;
 
+    public string OutputTopic { get; init; } = string.Empty;
+
     public string ConsumerGroupId { get; init; } = string.Empty;
 
     public string AutoOffsetReset { get; init; } = "Earliest";

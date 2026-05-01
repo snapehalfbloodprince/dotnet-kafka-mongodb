@@ -9,16 +9,22 @@ public sealed class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
     private readonly IKafkaMessageConsumer _kafkaMessageConsumer;
+    private readonly IKafkaMessageProducer _kafkaMessageProducer;
     private readonly WorkerOptions _workerOptions;
+    private readonly KafkaOptions _kafkaOptions;
 
     public Worker(
         ILogger<Worker> logger,
         IKafkaMessageConsumer kafkaMessageConsumer,
-        IOptions<WorkerOptions> workerOptions)
+        IKafkaMessageProducer kafkaMessageProducer,
+        IOptions<WorkerOptions> workerOptions,
+        IOptions<KafkaOptions> kafkaOptions)
     {
         _logger = logger;
         _kafkaMessageConsumer = kafkaMessageConsumer;
+        _kafkaMessageProducer = kafkaMessageProducer;
         _workerOptions = workerOptions.Value;
+        _kafkaOptions = kafkaOptions.Value;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -37,17 +43,15 @@ public sealed class Worker : BackgroundService
 
                     LogConsumedMessage(consumeResult);
 
+                    await ProduceToOutputTopicAsync(
+                        consumeResult,
+                        stoppingToken);
+
                     /*
-                     * Per ora il processamento è semplicemente:
-                     * "ho letto il messaggio e l'ho scritto nei log".
+                     * Ora il commit avviene solo DOPO che il messaggio
+                     * è stato prodotto correttamente sul topic di output.
                      *
-                     * Quindi possiamo committare.
-                     *
-                     * Nelle prossime lezioni il commit avverrà solo dopo:
-                     * - validazione JSON
-                     * - routing verso N topic
-                     * - eventuale scrittura audit su MongoDB
-                     * - gestione DLQ se necessaria
+                     * Questo è il primo passo verso una semantica at-least-once.
                      */
                     _kafkaMessageConsumer.Commit(consumeResult);
                 }
@@ -58,9 +62,25 @@ public sealed class Worker : BackgroundService
                         "Errore durante la lettura da Kafka. Attendo {DelayInSeconds} secondi prima di riprovare.",
                         _workerOptions.ErrorDelayInSeconds);
 
-                    await Task.Delay(
-                        TimeSpan.FromSeconds(_workerOptions.ErrorDelayInSeconds),
-                        stoppingToken);
+                    await DelayAfterErrorAsync(stoppingToken);
+                }
+                catch (ProduceException<string, string> exception)
+                {
+                    _logger.LogError(
+                        exception,
+                        "Errore durante la produzione su Kafka. Il messaggio non verrà committato. Attendo {DelayInSeconds} secondi prima di riprovare.",
+                        _workerOptions.ErrorDelayInSeconds);
+
+                    await DelayAfterErrorAsync(stoppingToken);
+                }
+                catch (KafkaException exception)
+                {
+                    _logger.LogError(
+                        exception,
+                        "Errore Kafka generico. Attendo {DelayInSeconds} secondi prima di riprovare.",
+                        _workerOptions.ErrorDelayInSeconds);
+
+                    await DelayAfterErrorAsync(stoppingToken);
                 }
             }
         }
@@ -72,6 +92,38 @@ public sealed class Worker : BackgroundService
         {
             _logger.LogInformation("Kafka Router Worker arrestato correttamente.");
         }
+    }
+
+    private async Task ProduceToOutputTopicAsync(
+        ConsumeResult<string, string> consumeResult,
+        CancellationToken cancellationToken)
+    {
+        var key = consumeResult.Message.Key;
+        var value = consumeResult.Message.Value;
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _logger.LogWarning(
+                "Messaggio Kafka ignorato perché il payload è vuoto. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}.",
+                consumeResult.Topic,
+                consumeResult.Partition.Value,
+                consumeResult.Offset.Value);
+
+            return;
+        }
+
+        await _kafkaMessageProducer.ProduceAsync(
+            _kafkaOptions.OutputTopic,
+            key,
+            value,
+            cancellationToken);
+    }
+
+    private async Task DelayAfterErrorAsync(CancellationToken stoppingToken)
+    {
+        await Task.Delay(
+            TimeSpan.FromSeconds(_workerOptions.ErrorDelayInSeconds),
+            stoppingToken);
     }
 
     private void LogConsumedMessage(ConsumeResult<string, string> consumeResult)
