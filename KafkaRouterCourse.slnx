@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/KafkaRouter.Worker/KafkaRouter.Worker.csproj" />
+  </Folder>
+</Solution>
