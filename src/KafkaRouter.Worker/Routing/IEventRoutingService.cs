@@ -4,5 +4,7 @@ namespace KafkaRouter.Worker.Routing;
 
 public interface IEventRoutingService
 {
-    RoutingDecision GetRoutingDecision(EventEnvelope eventEnvelope);
+    Task<RoutingDecision> GetRoutingDecisionAsync(
+        EventEnvelope eventEnvelope,
+        CancellationToken cancellationToken);
 }

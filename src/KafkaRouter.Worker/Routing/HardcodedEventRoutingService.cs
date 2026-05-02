@@ -4,18 +4,21 @@ namespace KafkaRouter.Worker.Routing;
 
 public sealed class HardcodedEventRoutingService : IEventRoutingService
 {
-    public RoutingDecision GetRoutingDecision(EventEnvelope eventEnvelope)
+    public Task<RoutingDecision> GetRoutingDecisionAsync(
+        EventEnvelope eventEnvelope,
+        CancellationToken cancellationToken)
     {
         var eventType = eventEnvelope.EventType?.Trim();
 
         if (string.IsNullOrWhiteSpace(eventType))
         {
-            return RoutingDecision.DeadLetter(
-                errorCode: "MISSING_EVENT_TYPE",
-                errorMessage: "Impossibile instradare l'evento perché eventType è vuoto.");
+            return Task.FromResult(
+                RoutingDecision.DeadLetter(
+                    errorCode: "MISSING_EVENT_TYPE",
+                    errorMessage: "Impossibile instradare l'evento perché eventType è vuoto."));
         }
 
-        return eventType switch
+        var routingDecision = eventType switch
         {
             "CustomerCreated" => RoutingDecision.RouteTo(
                 "events.crm",
@@ -33,5 +36,7 @@ public sealed class HardcodedEventRoutingService : IEventRoutingService
                 errorCode: "UNKNOWN_EVENT_TYPE",
                 errorMessage: $"Nessuna regola di routing configurata per eventType '{eventType}'.")
         };
+
+        return Task.FromResult(routingDecision);
     }
 }

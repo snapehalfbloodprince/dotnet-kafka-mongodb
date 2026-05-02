@@ -121,7 +121,7 @@ public sealed class Worker : BackgroundService
 
         var eventEnvelope = parseResult.EventEnvelope!;
 
-        var routingDecision = _eventRoutingService.GetRoutingDecision(eventEnvelope);
+        var routingDecision = await _eventRoutingService.GetRoutingDecisionAsync(eventEnvelope, cancellationToken);
 
         if (!routingDecision.IsRoutable)
         {

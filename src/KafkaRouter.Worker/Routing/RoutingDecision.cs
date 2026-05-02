@@ -24,9 +24,20 @@ public sealed class RoutingDecision
 
     public static RoutingDecision RouteTo(params string[] destinationTopics)
     {
+        return RouteTo((IEnumerable<string>)destinationTopics);
+    }
+
+    public static RoutingDecision RouteTo(IEnumerable<string> destinationTopics)
+    {
+        var normalizedDestinationTopics = destinationTopics
+            .Where(topic => !string.IsNullOrWhiteSpace(topic))
+            .Select(topic => topic.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         return new RoutingDecision(
             isRoutable: true,
-            destinationTopics: destinationTopics,
+            destinationTopics: normalizedDestinationTopics,
             errorCode: null,
             errorMessage: null);
     }

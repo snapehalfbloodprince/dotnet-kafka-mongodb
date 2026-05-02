@@ -13,7 +13,7 @@ public sealed class RoutingRuleDocument
     public string EventType { get; init; } = string.Empty;
 
     [BsonElement("destinationTopics")]
-    public IReadOnlyCollection<string> DestinationTopics { get; init; } = Array.Empty<string>();
+    public string[] DestinationTopics { get; init; } = Array.Empty<string>();
 
     [BsonElement("isEnabled")]
     public bool IsEnabled { get; init; }

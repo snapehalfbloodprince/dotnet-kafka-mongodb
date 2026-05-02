@@ -44,7 +44,7 @@ builder.Services.AddSingleton<IKafkaMessageConsumer, KafkaMessageConsumer>();
 builder.Services.AddSingleton<IKafkaMessageProducer, KafkaMessageProducer>();
 
 builder.Services.AddSingleton<IEventEnvelopeParser, EventEnvelopeParser>();
-builder.Services.AddSingleton<IEventRoutingService, HardcodedEventRoutingService>();
+builder.Services.AddSingleton<IEventRoutingService, MongoDbEventRoutingService>();
 builder.Services.AddSingleton<IDeadLetterMessageFactory, DeadLetterMessageFactory>();
 
 builder.Services.AddSingleton<IRoutingRuleRepository, RoutingRuleRepository>();
