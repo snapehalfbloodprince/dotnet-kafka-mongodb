@@ -8,7 +8,7 @@ public sealed class KafkaOptions
 
     public string InputTopic { get; init; } = string.Empty;
 
-    public string OutputTopic { get; init; } = string.Empty;
+    public string DeadLetterTopic { get; init; } = string.Empty;
 
     public string ConsumerGroupId { get; init; } = string.Empty;
 
