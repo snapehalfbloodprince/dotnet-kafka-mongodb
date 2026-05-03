@@ -6,6 +6,7 @@ using KafkaRouter.Worker.Options;
 using KafkaRouter.Worker.Parsing;
 using KafkaRouter.Worker.Routing;
 using Microsoft.Extensions.Options;
+using MongoDB.Driver;
 
 namespace KafkaRouter.Worker;
 
@@ -19,6 +20,8 @@ public sealed class Worker : BackgroundService
     private readonly IDeadLetterMessageFactory _deadLetterMessageFactory;
     private readonly WorkerOptions _workerOptions;
     private readonly KafkaOptions _kafkaOptions;
+
+    private int _consecutiveTechnicalFailures;
 
     public Worker(
         ILogger<Worker> logger,
@@ -57,33 +60,60 @@ public sealed class Worker : BackgroundService
                     await ProcessMessageAsync(
                         consumeResult,
                         stoppingToken);
+
+                    ResetConsecutiveTechnicalFailures();
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (ConsumeException exception)
                 {
-                    _logger.LogError(
+                    await HandleTechnicalFailureAsync(
                         exception,
-                        "Errore durante la lettura da Kafka. Attendo {DelayInSeconds} secondi prima di riprovare.",
-                        _workerOptions.ErrorDelayInSeconds);
-
-                    await DelayAfterErrorAsync(stoppingToken);
+                        errorCategory: "KAFKA_CONSUME_ERROR",
+                        message: "Errore durante la lettura da Kafka. Nessun offset verrà committato.",
+                        stoppingToken);
                 }
                 catch (ProduceException<string, string> exception)
                 {
-                    _logger.LogError(
+                    await HandleTechnicalFailureAsync(
                         exception,
-                        "Errore durante la produzione su Kafka. Il messaggio non verrà committato. Attendo {DelayInSeconds} secondi prima di riprovare.",
-                        _workerOptions.ErrorDelayInSeconds);
-
-                    await DelayAfterErrorAsync(stoppingToken);
+                        errorCategory: "KAFKA_PRODUCE_ERROR",
+                        message: "Errore durante la produzione su Kafka. Il messaggio non verrà committato.",
+                        stoppingToken);
                 }
                 catch (KafkaException exception)
                 {
-                    _logger.LogError(
+                    await HandleTechnicalFailureAsync(
                         exception,
-                        "Errore Kafka generico. Attendo {DelayInSeconds} secondi prima di riprovare.",
-                        _workerOptions.ErrorDelayInSeconds);
-
-                    await DelayAfterErrorAsync(stoppingToken);
+                        errorCategory: "KAFKA_ERROR",
+                        message: "Errore Kafka generico. Il messaggio non verrà committato.",
+                        stoppingToken);
+                }
+                catch (MongoException exception)
+                {
+                    await HandleTechnicalFailureAsync(
+                        exception,
+                        errorCategory: "MONGODB_ERROR",
+                        message: "Errore MongoDB durante il processamento. Il messaggio non verrà committato.",
+                        stoppingToken);
+                }
+                catch (TimeoutException exception)
+                {
+                    await HandleTechnicalFailureAsync(
+                        exception,
+                        errorCategory: "TIMEOUT_ERROR",
+                        message: "Timeout durante il processamento. Il messaggio non verrà committato.",
+                        stoppingToken);
+                }
+                catch (Exception exception)
+                {
+                    await HandleTechnicalFailureAsync(
+                        exception,
+                        errorCategory: "UNEXPECTED_TECHNICAL_ERROR",
+                        message: "Errore tecnico imprevisto durante il processamento. Il messaggio non verrà committato.",
+                        stoppingToken);
                 }
             }
         }
@@ -116,12 +146,19 @@ public sealed class Worker : BackgroundService
 
             _kafkaMessageConsumer.Commit(consumeResult);
 
+            LogApplicationFailureHandled(
+                consumeResult,
+                parseResult.ErrorCode ?? "PARSE_ERROR",
+                parseResult.ErrorMessage ?? "Errore non specificato durante il parsing del messaggio.");
+
             return;
         }
 
         var eventEnvelope = parseResult.EventEnvelope!;
 
-        var routingDecision = await _eventRoutingService.GetRoutingDecisionAsync(eventEnvelope, cancellationToken);
+        var routingDecision = await _eventRoutingService.GetRoutingDecisionAsync(
+            eventEnvelope,
+            cancellationToken);
 
         if (!routingDecision.IsRoutable)
         {
@@ -133,6 +170,11 @@ public sealed class Worker : BackgroundService
                 cancellationToken);
 
             _kafkaMessageConsumer.Commit(consumeResult);
+
+            LogApplicationFailureHandled(
+                consumeResult,
+                routingDecision.ErrorCode ?? "ROUTING_ERROR",
+                routingDecision.ErrorMessage ?? "Errore non specificato durante il routing del messaggio.");
 
             return;
         }
@@ -209,6 +251,61 @@ public sealed class Worker : BackgroundService
             deadLetterKey,
             deadLetterPayload,
             cancellationToken);
+    }
+
+    private async Task HandleTechnicalFailureAsync(
+        Exception exception,
+        string errorCategory,
+        string message,
+        CancellationToken stoppingToken)
+    {
+        _consecutiveTechnicalFailures++;
+
+        _logger.LogError(
+            exception,
+            "{Message} ErrorCategory: {ErrorCategory}. ConsecutiveTechnicalFailures: {ConsecutiveTechnicalFailures}. Attendo {DelayInSeconds} secondi prima di continuare.",
+            message,
+            errorCategory,
+            _consecutiveTechnicalFailures,
+            _workerOptions.ErrorDelayInSeconds);
+
+        if (_consecutiveTechnicalFailures >= _workerOptions.ConsecutiveFailuresWarningThreshold)
+        {
+            _logger.LogCritical(
+                "Soglia di errori tecnici consecutivi raggiunta. ConsecutiveTechnicalFailures: {ConsecutiveTechnicalFailures}. Threshold: {Threshold}.",
+                _consecutiveTechnicalFailures,
+                _workerOptions.ConsecutiveFailuresWarningThreshold);
+        }
+
+        await DelayAfterErrorAsync(stoppingToken);
+    }
+
+    private void ResetConsecutiveTechnicalFailures()
+    {
+        if (_consecutiveTechnicalFailures == 0)
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Processamento tornato a buon fine dopo {ConsecutiveTechnicalFailures} errori tecnici consecutivi.",
+            _consecutiveTechnicalFailures);
+
+        _consecutiveTechnicalFailures = 0;
+    }
+
+    private void LogApplicationFailureHandled(
+        ConsumeResult<string, string> consumeResult,
+        string errorCode,
+        string errorMessage)
+    {
+        _logger.LogWarning(
+            "Errore applicativo gestito con DLQ e commit. ErrorCode: {ErrorCode}. ErrorMessage: {ErrorMessage}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}.",
+            errorCode,
+            errorMessage,
+            consumeResult.Topic,
+            consumeResult.Partition.Value,
+            consumeResult.Offset.Value);
     }
 
     private static string? GetEffectiveMessageKey(
