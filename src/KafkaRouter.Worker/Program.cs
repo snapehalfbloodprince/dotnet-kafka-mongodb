@@ -14,6 +14,12 @@ builder.Services
     .Bind(builder.Configuration.GetSection(WorkerOptions.SectionName))
     .Validate(options => options.ErrorDelayInSeconds > 0, "Worker:ErrorDelayInSeconds deve essere maggiore di zero.")
     .Validate(options => options.ConsecutiveFailuresWarningThreshold > 0, "Worker:ConsecutiveFailuresWarningThreshold deve essere maggiore di zero.")
+    .Validate(options => options.TechnicalRetryMaxAttempts > 0, "Worker:TechnicalRetryMaxAttempts deve essere maggiore di zero.")
+    .Validate(options => options.TechnicalRetryInitialDelayInSeconds > 0, "Worker:TechnicalRetryInitialDelayInSeconds deve essere maggiore di zero.")
+    .Validate(options => options.TechnicalRetryMaxDelayInSeconds > 0, "Worker:TechnicalRetryMaxDelayInSeconds deve essere maggiore di zero.")
+    .Validate(
+        options => options.TechnicalRetryMaxDelayInSeconds >= options.TechnicalRetryInitialDelayInSeconds,
+        "Worker:TechnicalRetryMaxDelayInSeconds deve essere maggiore o uguale a Worker:TechnicalRetryInitialDelayInSeconds.")
     .ValidateOnStart();
 
 builder.Services

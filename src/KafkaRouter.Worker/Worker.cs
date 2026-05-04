@@ -57,7 +57,7 @@ public sealed class Worker : BackgroundService
                 {
                     var consumeResult = _kafkaMessageConsumer.Consume(stoppingToken);
 
-                    await ProcessMessageAsync(
+                    await ProcessMessageWithRetryAsync(
                         consumeResult,
                         stoppingToken);
 
@@ -75,44 +75,20 @@ public sealed class Worker : BackgroundService
                         message: "Errore durante la lettura da Kafka. Nessun offset verrà committato.",
                         stoppingToken);
                 }
-                catch (ProduceException<string, string> exception)
-                {
-                    await HandleTechnicalFailureAsync(
-                        exception,
-                        errorCategory: "KAFKA_PRODUCE_ERROR",
-                        message: "Errore durante la produzione su Kafka. Il messaggio non verrà committato.",
-                        stoppingToken);
-                }
                 catch (KafkaException exception)
                 {
                     await HandleTechnicalFailureAsync(
                         exception,
                         errorCategory: "KAFKA_ERROR",
-                        message: "Errore Kafka generico. Il messaggio non verrà committato.",
-                        stoppingToken);
-                }
-                catch (MongoException exception)
-                {
-                    await HandleTechnicalFailureAsync(
-                        exception,
-                        errorCategory: "MONGODB_ERROR",
-                        message: "Errore MongoDB durante il processamento. Il messaggio non verrà committato.",
-                        stoppingToken);
-                }
-                catch (TimeoutException exception)
-                {
-                    await HandleTechnicalFailureAsync(
-                        exception,
-                        errorCategory: "TIMEOUT_ERROR",
-                        message: "Timeout durante il processamento. Il messaggio non verrà committato.",
+                        message: "Errore Kafka generico fuori dal processamento del singolo messaggio.",
                         stoppingToken);
                 }
                 catch (Exception exception)
                 {
                     await HandleTechnicalFailureAsync(
                         exception,
-                        errorCategory: "UNEXPECTED_TECHNICAL_ERROR",
-                        message: "Errore tecnico imprevisto durante il processamento. Il messaggio non verrà committato.",
+                        errorCategory: "UNEXPECTED_WORKER_ERROR",
+                        message: "Errore imprevisto nel loop principale del Worker.",
                         stoppingToken);
                 }
             }
@@ -124,6 +100,81 @@ public sealed class Worker : BackgroundService
         finally
         {
             _logger.LogInformation("Kafka Router Worker arrestato correttamente.");
+        }
+    }
+
+    private async Task ProcessMessageWithRetryAsync(
+        ConsumeResult<string, string> consumeResult,
+        CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            for (var attempt = 1; attempt <= _workerOptions.TechnicalRetryMaxAttempts; attempt++)
+            {
+                try
+                {
+                    _logger.LogInformation(
+                        "Avvio processamento messaggio. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}. Attempt: {Attempt}/{MaxAttempts}.",
+                        consumeResult.Topic,
+                        consumeResult.Partition.Value,
+                        consumeResult.Offset.Value,
+                        attempt,
+                        _workerOptions.TechnicalRetryMaxAttempts);
+
+                    await ProcessMessageAsync(
+                        consumeResult,
+                        cancellationToken);
+
+                    return;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception) when (IsTechnicalException(exception))
+                {
+                    _consecutiveTechnicalFailures++;
+
+                    var retryDelay = CalculateRetryDelay(attempt);
+
+                    _logger.LogError(
+                        exception,
+                        "Errore tecnico durante il processamento del messaggio. ErrorType: {ErrorType}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}. Attempt: {Attempt}/{MaxAttempts}. ConsecutiveTechnicalFailures: {ConsecutiveTechnicalFailures}. RetryDelaySeconds: {RetryDelaySeconds}. Il messaggio NON verrà committato.",
+                        exception.GetType().Name,
+                        consumeResult.Topic,
+                        consumeResult.Partition.Value,
+                        consumeResult.Offset.Value,
+                        attempt,
+                        _workerOptions.TechnicalRetryMaxAttempts,
+                        _consecutiveTechnicalFailures,
+                        retryDelay.TotalSeconds);
+
+                    if (_consecutiveTechnicalFailures >= _workerOptions.ConsecutiveFailuresWarningThreshold)
+                    {
+                        _logger.LogCritical(
+                            "Soglia di errori tecnici consecutivi raggiunta. ConsecutiveTechnicalFailures: {ConsecutiveTechnicalFailures}. Threshold: {Threshold}.",
+                            _consecutiveTechnicalFailures,
+                            _workerOptions.ConsecutiveFailuresWarningThreshold);
+                    }
+
+                    if (attempt < _workerOptions.TechnicalRetryMaxAttempts)
+                    {
+                        await Task.Delay(
+                            retryDelay,
+                            cancellationToken);
+                    }
+                }
+            }
+
+            _logger.LogCritical(
+                "Tentativi tecnici esauriti per il messaggio corrente. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}. MaxAttempts: {MaxAttempts}. Il messaggio resta NON committato. Attendo {DelayInSeconds} secondi e poi riprovo lo stesso messaggio.",
+                consumeResult.Topic,
+                consumeResult.Partition.Value,
+                consumeResult.Offset.Value,
+                _workerOptions.TechnicalRetryMaxAttempts,
+                _workerOptions.ErrorDelayInSeconds);
+
+            await DelayAfterErrorAsync(cancellationToken);
         }
     }
 
@@ -278,6 +329,31 @@ public sealed class Worker : BackgroundService
         }
 
         await DelayAfterErrorAsync(stoppingToken);
+    }
+
+    private TimeSpan CalculateRetryDelay(int attempt)
+    {
+        var exponentialDelay = _workerOptions.TechnicalRetryInitialDelayInSeconds
+            * Math.Pow(2, attempt - 1);
+
+        var cappedDelay = Math.Min(
+            exponentialDelay,
+            _workerOptions.TechnicalRetryMaxDelayInSeconds);
+
+        return TimeSpan.FromSeconds(cappedDelay);
+    }
+
+    private static bool IsTechnicalException(Exception exception)
+    {
+        return exception switch
+        {
+            ProduceException<string, string> => true,
+            KafkaException => true,
+            MongoException => true,
+            TimeoutException => true,
+            IOException => true,
+            _ => true
+        };
     }
 
     private void ResetConsecutiveTechnicalFailures()
