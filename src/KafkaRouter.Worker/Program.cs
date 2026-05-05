@@ -45,6 +45,7 @@ builder.Services
     .Validate(options => !string.IsNullOrWhiteSpace(options.ConnectionString), "MongoDb:ConnectionString è obbligatoria.")
     .Validate(options => !string.IsNullOrWhiteSpace(options.DatabaseName), "MongoDb:DatabaseName è obbligatorio.")
     .Validate(options => !string.IsNullOrWhiteSpace(options.RoutingRulesCollectionName), "MongoDb:RoutingRulesCollectionName è obbligatorio.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.ProcessedMessagesCollectionName), "MongoDb:ProcessedMessagesCollectionName è obbligatorio.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton<IKafkaMessageConsumer, KafkaMessageConsumer>();
@@ -55,6 +56,7 @@ builder.Services.AddSingleton<IEventRoutingService, MongoDbEventRoutingService>(
 builder.Services.AddSingleton<IDeadLetterMessageFactory, DeadLetterMessageFactory>();
 
 builder.Services.AddSingleton<IRoutingRuleRepository, RoutingRuleRepository>();
+builder.Services.AddSingleton<IProcessedMessageRepository, ProcessedMessageRepository>();
 builder.Services.AddSingleton<IMongoDbInitializer, MongoDbInitializer>();
 
 builder.Services.AddHostedService<Worker>();

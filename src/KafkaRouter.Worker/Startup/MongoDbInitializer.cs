@@ -6,13 +6,16 @@ public sealed class MongoDbInitializer : IMongoDbInitializer
 {
     private readonly ILogger<MongoDbInitializer> _logger;
     private readonly IRoutingRuleRepository _routingRuleRepository;
+    private readonly IProcessedMessageRepository _processedMessageRepository;
 
     public MongoDbInitializer(
         ILogger<MongoDbInitializer> logger,
-        IRoutingRuleRepository routingRuleRepository)
+        IRoutingRuleRepository routingRuleRepository,
+        IProcessedMessageRepository processedMessageRepository)
     {
         _logger = logger;
         _routingRuleRepository = routingRuleRepository;
+        _processedMessageRepository = processedMessageRepository;
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -20,6 +23,8 @@ public sealed class MongoDbInitializer : IMongoDbInitializer
         _logger.LogInformation("Inizializzazione MongoDB in corso.");
 
         await _routingRuleRepository.EnsureIndexesAsync(cancellationToken);
+        await _processedMessageRepository.EnsureIndexesAsync(cancellationToken);
+
         await _routingRuleRepository.SeedDefaultRulesAsync(cancellationToken);
 
         var enabledRules = await _routingRuleRepository.GetEnabledRulesAsync(cancellationToken);

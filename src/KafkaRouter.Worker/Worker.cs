@@ -2,6 +2,8 @@ using Confluent.Kafka;
 using KafkaRouter.Worker.DeadLetter;
 using KafkaRouter.Worker.Kafka;
 using KafkaRouter.Worker.Models;
+using KafkaRouter.Worker.MongoDb.Documents;
+using KafkaRouter.Worker.MongoDb.Repositories;
 using KafkaRouter.Worker.Options;
 using KafkaRouter.Worker.Parsing;
 using KafkaRouter.Worker.Routing;
@@ -18,6 +20,7 @@ public sealed class Worker : BackgroundService
     private readonly IEventEnvelopeParser _eventEnvelopeParser;
     private readonly IEventRoutingService _eventRoutingService;
     private readonly IDeadLetterMessageFactory _deadLetterMessageFactory;
+    private readonly IProcessedMessageRepository _processedMessageRepository;
     private readonly WorkerOptions _workerOptions;
     private readonly KafkaOptions _kafkaOptions;
 
@@ -30,6 +33,7 @@ public sealed class Worker : BackgroundService
         IEventEnvelopeParser eventEnvelopeParser,
         IEventRoutingService eventRoutingService,
         IDeadLetterMessageFactory deadLetterMessageFactory,
+        IProcessedMessageRepository processedMessageRepository,
         IOptions<WorkerOptions> workerOptions,
         IOptions<KafkaOptions> kafkaOptions)
     {
@@ -39,6 +43,7 @@ public sealed class Worker : BackgroundService
         _eventEnvelopeParser = eventEnvelopeParser;
         _eventRoutingService = eventRoutingService;
         _deadLetterMessageFactory = deadLetterMessageFactory;
+        _processedMessageRepository = processedMessageRepository;
         _workerOptions = workerOptions.Value;
         _kafkaOptions = kafkaOptions.Value;
     }
@@ -207,6 +212,25 @@ public sealed class Worker : BackgroundService
 
         var eventEnvelope = parseResult.EventEnvelope!;
 
+        var alreadyProcessed = await _processedMessageRepository.ExistsByEventIdAsync(
+            eventEnvelope.EventId!,
+            cancellationToken);
+
+        if (alreadyProcessed)
+        {
+            _logger.LogWarning(
+                "Messaggio duplicato rilevato. EventId: {EventId}. EventType: {EventType}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}. Il messaggio non verrà riprodotto sui topic di destinazione.",
+                eventEnvelope.EventId,
+                eventEnvelope.EventType,
+                consumeResult.Topic,
+                consumeResult.Partition.Value,
+                consumeResult.Offset.Value);
+
+            _kafkaMessageConsumer.Commit(consumeResult);
+
+            return;
+        }
+
         var routingDecision = await _eventRoutingService.GetRoutingDecisionAsync(
             eventEnvelope,
             cancellationToken);
@@ -235,6 +259,22 @@ public sealed class Worker : BackgroundService
             eventEnvelope,
             routingDecision,
             cancellationToken);
+
+        var processedMessage = CreateProcessedMessageDocument(
+            consumeResult,
+            eventEnvelope,
+            routingDecision);
+
+        var inserted = await _processedMessageRepository.TryInsertAsync(
+            processedMessage,
+            cancellationToken);
+
+        if (!inserted)
+        {
+            _logger.LogWarning(
+                "Il messaggio risulta già registrato come processato dopo la produzione. EventId: {EventId}. Possibile duplicato concorrente.",
+                eventEnvelope.EventId);
+        }
 
         _kafkaMessageConsumer.Commit(consumeResult);
     }
@@ -302,6 +342,23 @@ public sealed class Worker : BackgroundService
             deadLetterKey,
             deadLetterPayload,
             cancellationToken);
+    }
+
+    private static ProcessedMessageDocument CreateProcessedMessageDocument(
+        ConsumeResult<string, string> consumeResult,
+        EventEnvelope eventEnvelope,
+        RoutingDecision routingDecision)
+    {
+        return new ProcessedMessageDocument
+        {
+            EventId = eventEnvelope.EventId!,
+            EventType = eventEnvelope.EventType!,
+            SourceTopic = consumeResult.Topic,
+            SourcePartition = consumeResult.Partition.Value,
+            SourceOffset = consumeResult.Offset.Value,
+            DestinationTopics = routingDecision.DestinationTopics.ToArray(),
+            ProcessedAt = DateTimeOffset.UtcNow
+        };
     }
 
     private async Task HandleTechnicalFailureAsync(
