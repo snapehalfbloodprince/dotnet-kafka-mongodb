@@ -9,6 +9,7 @@ using KafkaRouter.Worker.Routing;
 using KafkaRouter.Worker.Startup;
 using Microsoft.Extensions.Options;
 using KafkaRouter.Worker.Metrics;
+using KafkaRouter.Worker.Processing;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,6 +59,7 @@ builder.Services.AddSingleton<IKafkaMessageProducer, KafkaMessageProducer>();
 builder.Services.AddSingleton<IEventEnvelopeParser, EventEnvelopeParser>();
 builder.Services.AddSingleton<IEventRoutingService, MongoDbEventRoutingService>();
 builder.Services.AddSingleton<IDeadLetterMessageFactory, DeadLetterMessageFactory>();
+builder.Services.AddSingleton<IMessageProcessingService, MessageProcessingService>();
 
 builder.Services.AddSingleton<IRoutingRuleRepository, RoutingRuleRepository>();
 builder.Services.AddSingleton<IProcessedMessageRepository, ProcessedMessageRepository>();
