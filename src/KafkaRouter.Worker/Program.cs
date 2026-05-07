@@ -8,6 +8,7 @@ using KafkaRouter.Worker.Parsing;
 using KafkaRouter.Worker.Routing;
 using KafkaRouter.Worker.Startup;
 using Microsoft.Extensions.Options;
+using KafkaRouter.Worker.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -65,6 +66,8 @@ builder.Services.AddSingleton<IMongoDbInitializer, MongoDbInitializer>();
 builder.Services.AddSingleton<IKafkaHealthCheckService, KafkaHealthCheckService>();
 builder.Services.AddSingleton<IMongoDbHealthCheckService, MongoDbHealthCheckService>();
 
+builder.Services.AddSingleton<IWorkerMetrics, InMemoryWorkerMetrics>();
+
 builder.Services.AddHostedService<Worker>();
 
 var app = builder.Build();
@@ -116,6 +119,14 @@ app.MapGet("/health/ready", async (
         : Results.Json(
             response,
             statusCode: StatusCodes.Status503ServiceUnavailable);
+});
+
+app.MapGet("/metrics", (
+    IWorkerMetrics workerMetrics) =>
+{
+    var snapshot = workerMetrics.GetSnapshot();
+
+    return Results.Ok(snapshot);
 });
 
 await app.RunAsync();

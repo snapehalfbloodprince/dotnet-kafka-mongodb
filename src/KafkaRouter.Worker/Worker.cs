@@ -9,6 +9,7 @@ using KafkaRouter.Worker.Parsing;
 using KafkaRouter.Worker.Routing;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
+using KafkaRouter.Worker.Metrics;
 
 namespace KafkaRouter.Worker;
 
@@ -23,7 +24,7 @@ public sealed class Worker : BackgroundService
     private readonly IProcessedMessageRepository _processedMessageRepository;
     private readonly WorkerOptions _workerOptions;
     private readonly KafkaOptions _kafkaOptions;
-
+    private readonly IWorkerMetrics _workerMetrics;
     private int _consecutiveTechnicalFailures;
 
     public Worker(
@@ -34,6 +35,7 @@ public sealed class Worker : BackgroundService
         IEventRoutingService eventRoutingService,
         IDeadLetterMessageFactory deadLetterMessageFactory,
         IProcessedMessageRepository processedMessageRepository,
+        IWorkerMetrics workerMetrics,
         IOptions<WorkerOptions> workerOptions,
         IOptions<KafkaOptions> kafkaOptions)
     {
@@ -46,6 +48,7 @@ public sealed class Worker : BackgroundService
         _processedMessageRepository = processedMessageRepository;
         _workerOptions = workerOptions.Value;
         _kafkaOptions = kafkaOptions.Value;
+        _workerMetrics = workerMetrics;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -144,6 +147,8 @@ public sealed class Worker : BackgroundService
                 {
                     _consecutiveTechnicalFailures++;
 
+                    _workerMetrics.IncrementTechnicalFailures("MESSAGE_PROCESSING_TECHNICAL_ERROR");
+
                     var retryDelay = CalculateRetryDelay(attempt);
 
                     _logger.LogError(
@@ -222,6 +227,10 @@ public sealed class Worker : BackgroundService
 
         if (alreadyProcessed)
         {
+            _workerMetrics.IncrementDuplicateMessages(
+                eventEnvelope.EventId!,
+                eventEnvelope.EventType!);
+
             _logger.LogWarning(
                 "Messaggio duplicato rilevato. EventId: {EventId}. EventType: {EventType}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}. Il messaggio non verrà riprodotto sui topic di destinazione.",
                 eventEnvelope.EventId,
@@ -279,6 +288,9 @@ public sealed class Worker : BackgroundService
                 "Il messaggio risulta già registrato come processato dopo la produzione. EventId: {EventId}. Possibile duplicato concorrente.",
                 eventEnvelope.EventId);
         }
+        _workerMetrics.IncrementProcessedMessages(
+            eventEnvelope.EventId!,
+            eventEnvelope.EventType!);
 
         _kafkaMessageConsumer.Commit(consumeResult);
     }
@@ -341,6 +353,11 @@ public sealed class Worker : BackgroundService
             consumeResult.Partition.Value,
             consumeResult.Offset.Value);
 
+        _workerMetrics.IncrementDeadLetterMessages(
+            eventEnvelope?.EventId,
+            eventEnvelope?.EventType,
+            errorCode);
+        
         await _kafkaMessageProducer.ProduceAsync(
             _kafkaOptions.DeadLetterTopic,
             deadLetterKey,
@@ -372,6 +389,8 @@ public sealed class Worker : BackgroundService
         CancellationToken stoppingToken)
     {
         _consecutiveTechnicalFailures++;
+
+        _workerMetrics.IncrementTechnicalFailures(errorCategory);
 
         _logger.LogError(
             exception,
