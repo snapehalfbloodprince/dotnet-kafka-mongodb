@@ -25,6 +25,36 @@ services:
     volumes:
       - kafka_data:/tmp/kraft-combined-logs
 
+  kafka-init-topics:
+    image: apache/kafka:4.2.0
+    container_name: kafka-router-init-topics
+    depends_on:
+      - broker
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "
+      echo 'Attendo che Kafka sia disponibile...';
+
+      until /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:19092 --list > /dev/null 2>&1;
+      do
+        echo 'Kafka non ancora pronto, attendo...';
+        sleep 2;
+      done;
+
+      echo 'Kafka disponibile. Creo i topic...';
+
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:19092 --create --if-not-exists --topic events.inbound --partitions 3 --replication-factor 1;
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:19092 --create --if-not-exists --topic events.crm --partitions 3 --replication-factor 1;
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:19092 --create --if-not-exists --topic events.billing --partitions 3 --replication-factor 1;
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:19092 --create --if-not-exists --topic events.notifications --partitions 3 --replication-factor 1;
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:19092 --create --if-not-exists --topic events.dead-letter --partitions 3 --replication-factor 1;
+
+      echo 'Topic Kafka creati/verificati:';
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:19092 --list;
+
+      echo 'Inizializzazione topic completata.';
+      "
+
   mongodb:
     image: mongo:8.0
     container_name: kafka-router-mongodb
@@ -49,6 +79,37 @@ services:
       ME_CONFIG_MONGODB_SERVER: mongodb
       ME_CONFIG_BASICAUTH_USERNAME: admin
       ME_CONFIG_BASICAUTH_PASSWORD: admin
+
+  kafka-router-worker:
+    build:
+      context: ..
+      dockerfile: src/KafkaRouter.Worker/Dockerfile
+    image: kafka-router-worker:local
+    restart: unless-stopped
+    depends_on:
+      kafka-init-topics:
+        condition: service_completed_successfully
+      mongodb:
+        condition: service_started
+    environment:
+      DOTNET_ENVIRONMENT: Development
+
+      Kafka__BootstrapServers: broker:19092
+      Kafka__InputTopic: events.inbound
+      Kafka__DeadLetterTopic: events.dead-letter
+      Kafka__ConsumerGroupId: kafka-router-worker-local
+      Kafka__AutoOffsetReset: Earliest
+
+      MongoDb__ConnectionString: mongodb://root:rootpassword@mongodb:27017
+      MongoDb__DatabaseName: kafka_router
+      MongoDb__RoutingRulesCollectionName: routing_rules
+      MongoDb__ProcessedMessagesCollectionName: processed_messages
+
+      Worker__ErrorDelayInSeconds: 5
+      Worker__ConsecutiveFailuresWarningThreshold: 5
+      Worker__TechnicalRetryMaxAttempts: 3
+      Worker__TechnicalRetryInitialDelayInSeconds: 1
+      Worker__TechnicalRetryMaxDelayInSeconds: 10
 
 volumes:
   kafka_data:
