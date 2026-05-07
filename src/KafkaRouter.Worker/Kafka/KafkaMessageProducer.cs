@@ -7,46 +7,33 @@ namespace KafkaRouter.Worker.Kafka;
 public sealed class KafkaMessageProducer : IKafkaMessageProducer
 {
     private readonly ILogger<KafkaMessageProducer> _logger;
+    private readonly WorkerOptions _workerOptions;
     private readonly IProducer<string, string> _producer;
 
     public KafkaMessageProducer(
-        IOptions<KafkaOptions> options,
+        IOptions<KafkaOptions> kafkaOptions,
+        IOptions<WorkerOptions> workerOptions,
         ILogger<KafkaMessageProducer> logger)
     {
         _logger = logger;
+        _workerOptions = workerOptions.Value;
 
-        var kafkaOptions = options.Value;
+        var options = kafkaOptions.Value;
 
         var producerConfig = new ProducerConfig
         {
-            BootstrapServers = kafkaOptions.BootstrapServers,
-
-            /*
-             * Acks.All significa:
-             * considera il messaggio consegnato solo quando Kafka conferma
-             * secondo il livello di replica configurato.
-             *
-             * In locale abbiamo replication-factor 1, quindi è semplice.
-             * In produzione diventa molto più importante.
-             */
+            BootstrapServers = options.BootstrapServers,
             Acks = Acks.All,
-
-            /*
-             * EnableIdempotence riduce il rischio di duplicati generati dal producer
-             * in caso di retry interni del client.
-             *
-             * Non risolve da solo TUTTI i duplicati applicativi, ma è una buona base.
-             */
             EnableIdempotence = true,
-
-            ClientId = "kafka-router-worker-producer"
+            ClientId = $"kafka-router-producer-{_workerOptions.InstanceName}"
         };
 
         _producer = new ProducerBuilder<string, string>(producerConfig)
             .SetErrorHandler((_, error) =>
             {
                 _logger.LogError(
-                    "Errore Kafka producer. Code: {Code}. Reason: {Reason}. IsFatal: {IsFatal}",
+                    "Errore Kafka producer. InstanceName: {InstanceName}. Code: {Code}. Reason: {Reason}. IsFatal: {IsFatal}",
+                    _workerOptions.InstanceName,
                     error.Code,
                     error.Reason,
                     error.IsFatal);
@@ -72,7 +59,8 @@ public sealed class KafkaMessageProducer : IKafkaMessageProducer
             cancellationToken);
 
         _logger.LogInformation(
-            "Messaggio prodotto su Kafka. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}. Status: {Status}.",
+            "Messaggio prodotto su Kafka. InstanceName: {InstanceName}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}. Status: {Status}.",
+            _workerOptions.InstanceName,
             deliveryResult.Topic,
             deliveryResult.Partition.Value,
             deliveryResult.Offset.Value,
@@ -85,21 +73,22 @@ public sealed class KafkaMessageProducer : IKafkaMessageProducer
     {
         try
         {
-            _logger.LogInformation("Flush producer Kafka in corso.");
+            _logger.LogInformation(
+                "Flush producer Kafka in corso. InstanceName: {InstanceName}.",
+                _workerOptions.InstanceName);
 
-            /*
-             * Flush tenta di completare eventuali messaggi ancora in coda
-             * prima della chiusura del producer.
-             */
             _producer.Flush(TimeSpan.FromSeconds(10));
 
-            _logger.LogInformation("Producer Kafka flush completato.");
+            _logger.LogInformation(
+                "Producer Kafka flush completato. InstanceName: {InstanceName}.",
+                _workerOptions.InstanceName);
         }
         catch (KafkaException exception)
         {
             _logger.LogError(
                 exception,
-                "Errore durante il flush del producer Kafka.");
+                "Errore durante il flush del producer Kafka. InstanceName: {InstanceName}.",
+                _workerOptions.InstanceName);
         }
         finally
         {

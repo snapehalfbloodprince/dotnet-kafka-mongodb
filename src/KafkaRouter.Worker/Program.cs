@@ -12,6 +12,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services
     .AddOptions<WorkerOptions>()
     .Bind(builder.Configuration.GetSection(WorkerOptions.SectionName))
+    .Validate(options => !string.IsNullOrWhiteSpace(options.InstanceName), "Worker:InstanceName è obbligatorio.")
     .Validate(options => options.ErrorDelayInSeconds > 0, "Worker:ErrorDelayInSeconds deve essere maggiore di zero.")
     .Validate(options => options.ConsecutiveFailuresWarningThreshold > 0, "Worker:ConsecutiveFailuresWarningThreshold deve essere maggiore di zero.")
     .Validate(options => options.TechnicalRetryMaxAttempts > 0, "Worker:TechnicalRetryMaxAttempts deve essere maggiore di zero.")

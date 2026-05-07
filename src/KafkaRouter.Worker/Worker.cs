@@ -50,7 +50,9 @@ public sealed class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Kafka Router Worker avviato.");
+        _logger.LogInformation(
+    "Kafka Router Worker avviato. InstanceName: {InstanceName}.",
+    _workerOptions.InstanceName);
 
         _kafkaMessageConsumer.Subscribe();
 
@@ -104,7 +106,9 @@ public sealed class Worker : BackgroundService
         }
         finally
         {
-            _logger.LogInformation("Kafka Router Worker arrestato correttamente.");
+            _logger.LogInformation(
+    "Kafka Router Worker arrestato correttamente. InstanceName: {InstanceName}.",
+    _workerOptions.InstanceName);
         }
     }
 

@@ -7,37 +7,36 @@ namespace KafkaRouter.Worker.Kafka;
 public sealed class KafkaMessageConsumer : IKafkaMessageConsumer
 {
     private readonly ILogger<KafkaMessageConsumer> _logger;
-    private readonly KafkaOptions _options;
+    private readonly KafkaOptions _kafkaOptions;
+    private readonly WorkerOptions _workerOptions;
     private readonly IConsumer<string, string> _consumer;
 
     private bool _isSubscribed;
 
     public KafkaMessageConsumer(
-        IOptions<KafkaOptions> options,
+        IOptions<KafkaOptions> kafkaOptions,
+        IOptions<WorkerOptions> workerOptions,
         ILogger<KafkaMessageConsumer> logger)
     {
-        _options = options.Value;
+        _kafkaOptions = kafkaOptions.Value;
+        _workerOptions = workerOptions.Value;
         _logger = logger;
 
         var consumerConfig = new ConsumerConfig
         {
-            BootstrapServers = _options.BootstrapServers,
-            GroupId = _options.ConsumerGroupId,
-            AutoOffsetReset = ParseAutoOffsetReset(_options.AutoOffsetReset),
-
-            // Best practice didattica:
-            // non vogliamo che Kafka committi automaticamente.
-            // Il commit deve avvenire solo dopo che il messaggio è stato processato.
+            BootstrapServers = _kafkaOptions.BootstrapServers,
+            GroupId = _kafkaOptions.ConsumerGroupId,
+            AutoOffsetReset = ParseAutoOffsetReset(_kafkaOptions.AutoOffsetReset),
             EnableAutoCommit = false,
-
-            ClientId = "kafka-router-worker"
+            ClientId = $"kafka-router-consumer-{_workerOptions.InstanceName}"
         };
 
         _consumer = new ConsumerBuilder<string, string>(consumerConfig)
             .SetErrorHandler((_, error) =>
             {
                 _logger.LogError(
-                    "Errore Kafka. Code: {Code}. Reason: {Reason}. IsFatal: {IsFatal}",
+                    "Errore Kafka. InstanceName: {InstanceName}. Code: {Code}. Reason: {Reason}. IsFatal: {IsFatal}",
+                    _workerOptions.InstanceName,
                     error.Code,
                     error.Reason,
                     error.IsFatal);
@@ -45,13 +44,15 @@ public sealed class KafkaMessageConsumer : IKafkaMessageConsumer
             .SetPartitionsAssignedHandler((_, partitions) =>
             {
                 _logger.LogInformation(
-                    "Partizioni assegnate al consumer: {Partitions}",
+                    "Partizioni assegnate al consumer. InstanceName: {InstanceName}. Partitions: {Partitions}.",
+                    _workerOptions.InstanceName,
                     string.Join(", ", partitions.Select(partition => partition.ToString())));
             })
             .SetPartitionsRevokedHandler((_, partitions) =>
             {
                 _logger.LogWarning(
-                    "Partizioni revocate al consumer: {Partitions}",
+                    "Partizioni revocate al consumer. InstanceName: {InstanceName}. Partitions: {Partitions}.",
+                    _workerOptions.InstanceName,
                     string.Join(", ", partitions.Select(partition => partition.ToString())));
             })
             .Build();
@@ -64,13 +65,14 @@ public sealed class KafkaMessageConsumer : IKafkaMessageConsumer
             return;
         }
 
-        _consumer.Subscribe(_options.InputTopic);
+        _consumer.Subscribe(_kafkaOptions.InputTopic);
         _isSubscribed = true;
 
         _logger.LogInformation(
-            "Consumer Kafka sottoscritto al topic {InputTopic} con consumer group {ConsumerGroupId}.",
-            _options.InputTopic,
-            _options.ConsumerGroupId);
+            "Consumer Kafka sottoscritto. InstanceName: {InstanceName}. InputTopic: {InputTopic}. ConsumerGroupId: {ConsumerGroupId}.",
+            _workerOptions.InstanceName,
+            _kafkaOptions.InputTopic,
+            _kafkaOptions.ConsumerGroupId);
     }
 
     public ConsumeResult<string, string> Consume(CancellationToken cancellationToken)
@@ -88,7 +90,8 @@ public sealed class KafkaMessageConsumer : IKafkaMessageConsumer
         _consumer.Commit(consumeResult);
 
         _logger.LogInformation(
-            "Offset committato. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}.",
+            "Offset committato. InstanceName: {InstanceName}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}.",
+            _workerOptions.InstanceName,
             consumeResult.Topic,
             consumeResult.Partition.Value,
             consumeResult.Offset.Value);
@@ -98,15 +101,22 @@ public sealed class KafkaMessageConsumer : IKafkaMessageConsumer
     {
         try
         {
-            _logger.LogInformation("Chiusura consumer Kafka in corso.");
+            _logger.LogInformation(
+                "Chiusura consumer Kafka in corso. InstanceName: {InstanceName}.",
+                _workerOptions.InstanceName);
+
             _consumer.Close();
-            _logger.LogInformation("Consumer Kafka chiuso correttamente.");
+
+            _logger.LogInformation(
+                "Consumer Kafka chiuso correttamente. InstanceName: {InstanceName}.",
+                _workerOptions.InstanceName);
         }
         catch (KafkaException exception)
         {
             _logger.LogError(
                 exception,
-                "Errore durante la chiusura del consumer Kafka.");
+                "Errore durante la chiusura del consumer Kafka. InstanceName: {InstanceName}.",
+                _workerOptions.InstanceName);
         }
         finally
         {

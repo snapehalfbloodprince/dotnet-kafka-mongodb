@@ -4,6 +4,8 @@ public sealed class WorkerOptions
 {
     public const string SectionName = "Worker";
 
+    public string InstanceName { get; init; } = Environment.MachineName;
+
     public int ErrorDelayInSeconds { get; init; } = 5;
 
     public int ConsecutiveFailuresWarningThreshold { get; init; } = 5;
