@@ -4,7 +4,7 @@ namespace KafkaRouter.Worker.Processing;
 
 public interface IMessageProcessingService
 {
-    Task ProcessAsync(
+    Task<MessageProcessingResult> ProcessAsync(
         ConsumeResult<string, string> consumeResult,
         CancellationToken cancellationToken);
 }

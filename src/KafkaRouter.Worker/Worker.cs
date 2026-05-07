@@ -114,9 +114,18 @@ public sealed class Worker : BackgroundService
                         attempt,
                         _workerOptions.TechnicalRetryMaxAttempts);
 
-                    await _messageProcessingService.ProcessAsync(
+                    var processingResult = await _messageProcessingService.ProcessAsync(
                         consumeResult,
                         cancellationToken);
+
+                    _logger.LogInformation(
+                        "Processamento messaggio completato. Outcome: {Outcome}. EventId: {EventId}. EventType: {EventType}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}.",
+                        processingResult.Outcome,
+                        processingResult.EventId,
+                        processingResult.EventType,
+                        consumeResult.Topic,
+                        consumeResult.Partition.Value,
+                        consumeResult.Offset.Value);
 
                     return;
                 }

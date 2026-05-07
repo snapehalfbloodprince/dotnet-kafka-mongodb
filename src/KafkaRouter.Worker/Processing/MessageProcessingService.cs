@@ -46,7 +46,7 @@ public sealed class MessageProcessingService : IMessageProcessingService
         _kafkaOptions = kafkaOptions.Value;
     }
 
-    public async Task ProcessAsync(
+    public async Task<MessageProcessingResult> ProcessAsync(
         ConsumeResult<string, string> consumeResult,
         CancellationToken cancellationToken)
     {
@@ -56,10 +56,13 @@ public sealed class MessageProcessingService : IMessageProcessingService
 
         if (!parseResult.IsSuccess)
         {
+            var errorCode = parseResult.ErrorCode ?? "PARSE_ERROR";
+            var errorMessage = parseResult.ErrorMessage ?? "Errore non specificato durante il parsing del messaggio.";
+
             await ProduceToDeadLetterTopicAsync(
                 consumeResult,
-                parseResult.ErrorCode ?? "PARSE_ERROR",
-                parseResult.ErrorMessage ?? "Errore non specificato durante il parsing del messaggio.",
+                errorCode,
+                errorMessage,
                 eventEnvelope: null,
                 cancellationToken);
 
@@ -67,10 +70,14 @@ public sealed class MessageProcessingService : IMessageProcessingService
 
             LogApplicationFailureHandled(
                 consumeResult,
-                parseResult.ErrorCode ?? "PARSE_ERROR",
-                parseResult.ErrorMessage ?? "Errore non specificato durante il parsing del messaggio.");
+                errorCode,
+                errorMessage);
 
-            return;
+            return MessageProcessingResult.SentToDeadLetter(
+                eventId: null,
+                eventType: null,
+                errorCode,
+                errorMessage);
         }
 
         var eventEnvelope = parseResult.EventEnvelope!;
@@ -95,7 +102,9 @@ public sealed class MessageProcessingService : IMessageProcessingService
 
             _kafkaMessageConsumer.Commit(consumeResult);
 
-            return;
+            return MessageProcessingResult.SkippedAsDuplicate(
+                eventEnvelope.EventId!,
+                eventEnvelope.EventType!);
         }
 
         var routingDecision = await _eventRoutingService.GetRoutingDecisionAsync(
@@ -104,10 +113,13 @@ public sealed class MessageProcessingService : IMessageProcessingService
 
         if (!routingDecision.IsRoutable)
         {
+            var errorCode = routingDecision.ErrorCode ?? "ROUTING_ERROR";
+            var errorMessage = routingDecision.ErrorMessage ?? "Errore non specificato durante il routing del messaggio.";
+
             await ProduceToDeadLetterTopicAsync(
                 consumeResult,
-                routingDecision.ErrorCode ?? "ROUTING_ERROR",
-                routingDecision.ErrorMessage ?? "Errore non specificato durante il routing del messaggio.",
+                errorCode,
+                errorMessage,
                 eventEnvelope,
                 cancellationToken);
 
@@ -115,10 +127,14 @@ public sealed class MessageProcessingService : IMessageProcessingService
 
             LogApplicationFailureHandled(
                 consumeResult,
-                routingDecision.ErrorCode ?? "ROUTING_ERROR",
-                routingDecision.ErrorMessage ?? "Errore non specificato durante il routing del messaggio.");
+                errorCode,
+                errorMessage);
 
-            return;
+            return MessageProcessingResult.SentToDeadLetter(
+                eventEnvelope.EventId,
+                eventEnvelope.EventType,
+                errorCode,
+                errorMessage);
         }
 
         await ProduceToDestinationTopicsAsync(
@@ -148,6 +164,10 @@ public sealed class MessageProcessingService : IMessageProcessingService
             eventEnvelope.EventType!);
 
         _kafkaMessageConsumer.Commit(consumeResult);
+
+        return MessageProcessingResult.ProcessedSuccessfully(
+            eventEnvelope.EventId!,
+            eventEnvelope.EventType!);
     }
 
     private async Task ProduceToDestinationTopicsAsync(
