@@ -1,13 +1,15 @@
 using KafkaRouter.Worker;
 using KafkaRouter.Worker.DeadLetter;
+using KafkaRouter.Worker.Health;
 using KafkaRouter.Worker.Kafka;
 using KafkaRouter.Worker.MongoDb.Repositories;
 using KafkaRouter.Worker.Options;
 using KafkaRouter.Worker.Parsing;
 using KafkaRouter.Worker.Routing;
 using KafkaRouter.Worker.Startup;
+using Microsoft.Extensions.Options;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
 builder.Services
     .AddOptions<WorkerOptions>()
@@ -60,17 +62,67 @@ builder.Services.AddSingleton<IRoutingRuleRepository, RoutingRuleRepository>();
 builder.Services.AddSingleton<IProcessedMessageRepository, ProcessedMessageRepository>();
 builder.Services.AddSingleton<IMongoDbInitializer, MongoDbInitializer>();
 
+builder.Services.AddSingleton<IKafkaHealthCheckService, KafkaHealthCheckService>();
+builder.Services.AddSingleton<IMongoDbHealthCheckService, MongoDbHealthCheckService>();
+
 builder.Services.AddHostedService<Worker>();
 
-var host = builder.Build();
+var app = builder.Build();
 
-await InitializeMongoDbAsync(host);
+await InitializeMongoDbAsync(app.Services);
 
-await host.RunAsync();
-
-static async Task InitializeMongoDbAsync(IHost host)
+app.MapGet("/health/live", (
+    IOptions<WorkerOptions> workerOptions) =>
 {
-    using var scope = host.Services.CreateScope();
+    var response = new HealthResponse
+    {
+        Status = "Healthy",
+        InstanceName = workerOptions.Value.InstanceName,
+        CheckedAt = DateTimeOffset.UtcNow,
+        Checks = new Dictionary<string, string>
+        {
+            ["process"] = "Healthy"
+        }
+    };
+
+    return Results.Ok(response);
+});
+
+app.MapGet("/health/ready", async (
+    IKafkaHealthCheckService kafkaHealthCheckService,
+    IMongoDbHealthCheckService mongoDbHealthCheckService,
+    IOptions<WorkerOptions> workerOptions,
+    CancellationToken cancellationToken) =>
+{
+    var kafkaHealthy = await kafkaHealthCheckService.IsHealthyAsync(cancellationToken);
+    var mongoDbHealthy = await mongoDbHealthCheckService.IsHealthyAsync(cancellationToken);
+
+    var allHealthy = kafkaHealthy && mongoDbHealthy;
+
+    var response = new HealthResponse
+    {
+        Status = allHealthy ? "Healthy" : "Unhealthy",
+        InstanceName = workerOptions.Value.InstanceName,
+        CheckedAt = DateTimeOffset.UtcNow,
+        Checks = new Dictionary<string, string>
+        {
+            ["kafka"] = kafkaHealthy ? "Healthy" : "Unhealthy",
+            ["mongodb"] = mongoDbHealthy ? "Healthy" : "Unhealthy"
+        }
+    };
+
+    return allHealthy
+        ? Results.Ok(response)
+        : Results.Json(
+            response,
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+});
+
+await app.RunAsync();
+
+static async Task InitializeMongoDbAsync(IServiceProvider serviceProvider)
+{
+    using var scope = serviceProvider.CreateScope();
 
     var mongoDbInitializer = scope.ServiceProvider.GetRequiredService<IMongoDbInitializer>();
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()

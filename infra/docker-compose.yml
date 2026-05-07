@@ -91,8 +91,11 @@ services:
         condition: service_completed_successfully
       mongodb:
         condition: service_started
+    expose:
+      - "8080"
     environment:
       DOTNET_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
 
       Kafka__BootstrapServers: broker:19092
       Kafka__InputTopic: events.inbound
@@ -110,6 +113,13 @@ services:
       Worker__TechnicalRetryMaxAttempts: 3
       Worker__TechnicalRetryInitialDelayInSeconds: 1
       Worker__TechnicalRetryMaxDelayInSeconds: 10
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   kafka_data:
