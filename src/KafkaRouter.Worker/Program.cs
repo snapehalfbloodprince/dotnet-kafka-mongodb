@@ -23,6 +23,7 @@ builder.Services.AddSingleton<IEventEnvelopeParser, EventEnvelopeParser>();
 builder.Services.AddSingleton<IEventRoutingService, MongoDbEventRoutingService>();
 builder.Services.AddSingleton<IDeadLetterMessageFactory, DeadLetterMessageFactory>();
 builder.Services.AddSingleton<IMessageProcessingService, MessageProcessingService>();
+builder.Services.AddSingleton<IMessageProcessingRetryService, MessageProcessingRetryService>();
 
 builder.Services.AddSingleton<IRoutingRuleRepository, RoutingRuleRepository>();
 builder.Services.AddSingleton<IProcessedMessageRepository, ProcessedMessageRepository>();
