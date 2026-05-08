@@ -10,48 +10,11 @@ using KafkaRouter.Worker.Startup;
 using Microsoft.Extensions.Options;
 using KafkaRouter.Worker.Metrics;
 using KafkaRouter.Worker.Processing;
+using KafkaRouter.Worker.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services
-    .AddOptions<WorkerOptions>()
-    .Bind(builder.Configuration.GetSection(WorkerOptions.SectionName))
-    .Validate(options => !string.IsNullOrWhiteSpace(options.InstanceName), "Worker:InstanceName è obbligatorio.")
-    .Validate(options => options.ErrorDelayInSeconds > 0, "Worker:ErrorDelayInSeconds deve essere maggiore di zero.")
-    .Validate(options => options.ConsecutiveFailuresWarningThreshold > 0, "Worker:ConsecutiveFailuresWarningThreshold deve essere maggiore di zero.")
-    .Validate(options => options.TechnicalRetryMaxAttempts > 0, "Worker:TechnicalRetryMaxAttempts deve essere maggiore di zero.")
-    .Validate(options => options.TechnicalRetryInitialDelayInSeconds > 0, "Worker:TechnicalRetryInitialDelayInSeconds deve essere maggiore di zero.")
-    .Validate(options => options.TechnicalRetryMaxDelayInSeconds > 0, "Worker:TechnicalRetryMaxDelayInSeconds deve essere maggiore di zero.")
-    .Validate(
-        options => options.TechnicalRetryMaxDelayInSeconds >= options.TechnicalRetryInitialDelayInSeconds,
-        "Worker:TechnicalRetryMaxDelayInSeconds deve essere maggiore o uguale a Worker:TechnicalRetryInitialDelayInSeconds.")
-    .ValidateOnStart();
-
-builder.Services
-    .AddOptions<KafkaOptions>()
-    .Bind(builder.Configuration.GetSection(KafkaOptions.SectionName))
-    .Validate(options => !string.IsNullOrWhiteSpace(options.BootstrapServers), "Kafka:BootstrapServers è obbligatorio.")
-    .Validate(options => !string.IsNullOrWhiteSpace(options.InputTopic), "Kafka:InputTopic è obbligatorio.")
-    .Validate(options => !string.IsNullOrWhiteSpace(options.DeadLetterTopic), "Kafka:DeadLetterTopic è obbligatorio.")
-    .Validate(options => !string.IsNullOrWhiteSpace(options.ConsumerGroupId), "Kafka:ConsumerGroupId è obbligatorio.")
-    .Validate(
-        options =>
-        {
-            var value = options.AutoOffsetReset.Trim().ToLowerInvariant();
-
-            return value is "earliest" or "latest" or "error";
-        },
-        "Kafka:AutoOffsetReset deve essere Earliest, Latest oppure Error.")
-    .ValidateOnStart();
-
-builder.Services
-    .AddOptions<MongoDbOptions>()
-    .Bind(builder.Configuration.GetSection(MongoDbOptions.SectionName))
-    .Validate(options => !string.IsNullOrWhiteSpace(options.ConnectionString), "MongoDb:ConnectionString è obbligatoria.")
-    .Validate(options => !string.IsNullOrWhiteSpace(options.DatabaseName), "MongoDb:DatabaseName è obbligatorio.")
-    .Validate(options => !string.IsNullOrWhiteSpace(options.RoutingRulesCollectionName), "MongoDb:RoutingRulesCollectionName è obbligatorio.")
-    .Validate(options => !string.IsNullOrWhiteSpace(options.ProcessedMessagesCollectionName), "MongoDb:ProcessedMessagesCollectionName è obbligatorio.")
-    .ValidateOnStart();
+builder.Services.AddValidatedOptions(builder.Configuration);
 
 builder.Services.AddSingleton<IKafkaMessageConsumer, KafkaMessageConsumer>();
 builder.Services.AddSingleton<IKafkaMessageProducer, KafkaMessageProducer>();
