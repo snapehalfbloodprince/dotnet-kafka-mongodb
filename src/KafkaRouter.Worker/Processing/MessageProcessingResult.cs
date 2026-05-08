@@ -6,12 +6,14 @@ public sealed class MessageProcessingResult
         MessageProcessingOutcome outcome,
         string? eventId,
         string? eventType,
+        string? correlationId,
         string? errorCode,
         string? errorMessage)
     {
         Outcome = outcome;
         EventId = eventId;
         EventType = eventType;
+        CorrelationId = correlationId;
         ErrorCode = errorCode;
         ErrorMessage = errorMessage;
     }
@@ -21,6 +23,8 @@ public sealed class MessageProcessingResult
     public string? EventId { get; }
 
     public string? EventType { get; }
+
+    public string? CorrelationId { get; }
 
     public string? ErrorCode { get; }
 
@@ -34,12 +38,14 @@ public sealed class MessageProcessingResult
 
     public static MessageProcessingResult ProcessedSuccessfully(
         string eventId,
-        string eventType)
+        string eventType,
+        string? correlationId)
     {
         return new MessageProcessingResult(
             MessageProcessingOutcome.ProcessedSuccessfully,
             eventId,
             eventType,
+            correlationId,
             errorCode: null,
             errorMessage: null);
     }
@@ -47,6 +53,7 @@ public sealed class MessageProcessingResult
     public static MessageProcessingResult SentToDeadLetter(
         string? eventId,
         string? eventType,
+        string? correlationId,
         string errorCode,
         string errorMessage)
     {
@@ -54,18 +61,21 @@ public sealed class MessageProcessingResult
             MessageProcessingOutcome.SentToDeadLetter,
             eventId,
             eventType,
+            correlationId,
             errorCode,
             errorMessage);
     }
 
     public static MessageProcessingResult SkippedAsDuplicate(
         string eventId,
-        string eventType)
+        string eventType,
+        string? correlationId)
     {
         return new MessageProcessingResult(
             MessageProcessingOutcome.SkippedAsDuplicate,
             eventId,
             eventType,
+            correlationId,
             errorCode: null,
             errorMessage: null);
     }

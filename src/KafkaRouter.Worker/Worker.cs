@@ -119,10 +119,11 @@ public sealed class Worker : BackgroundService
                         cancellationToken);
 
                     _logger.LogInformation(
-                        "Processamento messaggio completato. Outcome: {Outcome}. EventId: {EventId}. EventType: {EventType}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}.",
+                        "Processamento messaggio completato. Outcome: {Outcome}. EventId: {EventId}. EventType: {EventType}. CorrelationId: {CorrelationId}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}.",
                         processingResult.Outcome,
                         processingResult.EventId,
                         processingResult.EventType,
+                        processingResult.CorrelationId,
                         consumeResult.Topic,
                         consumeResult.Partition.Value,
                         consumeResult.Offset.Value);

@@ -50,6 +50,10 @@ public sealed class MessageProcessingService : IMessageProcessingService
         ConsumeResult<string, string> consumeResult,
         CancellationToken cancellationToken)
     {
+        var context = ProcessingContext.FromConsumeResult(consumeResult);
+
+        using var initialScope = _logger.BeginProcessingScope(context);
+
         LogConsumedMessage(consumeResult);
 
         var parseResult = _eventEnvelopeParser.Parse(consumeResult.Message.Value);
@@ -76,11 +80,19 @@ public sealed class MessageProcessingService : IMessageProcessingService
             return MessageProcessingResult.SentToDeadLetter(
                 eventId: null,
                 eventType: null,
+                correlationId: context.GetEffectiveCorrelationId(),
                 errorCode,
                 errorMessage);
         }
 
         var eventEnvelope = parseResult.EventEnvelope!;
+
+        context = context.WithEventEnvelope(eventEnvelope);
+
+        using var eventScope = _logger.BeginProcessingScope(context);
+
+        _logger.LogInformation(
+            "Envelope evento parsato correttamente.");
 
         var alreadyProcessed = await _processedMessageRepository.ExistsByEventIdAsync(
             eventEnvelope.EventId!,
@@ -104,7 +116,8 @@ public sealed class MessageProcessingService : IMessageProcessingService
 
             return MessageProcessingResult.SkippedAsDuplicate(
                 eventEnvelope.EventId!,
-                eventEnvelope.EventType!);
+                eventEnvelope.EventType!,
+                eventEnvelope.CorrelationId);
         }
 
         var routingDecision = await _eventRoutingService.GetRoutingDecisionAsync(
@@ -133,6 +146,7 @@ public sealed class MessageProcessingService : IMessageProcessingService
             return MessageProcessingResult.SentToDeadLetter(
                 eventEnvelope.EventId,
                 eventEnvelope.EventType,
+                eventEnvelope.CorrelationId,
                 errorCode,
                 errorMessage);
         }
@@ -167,7 +181,8 @@ public sealed class MessageProcessingService : IMessageProcessingService
 
         return MessageProcessingResult.ProcessedSuccessfully(
             eventEnvelope.EventId!,
-            eventEnvelope.EventType!);
+            eventEnvelope.EventType!,
+            eventEnvelope.CorrelationId);
     }
 
     private async Task ProduceToDestinationTopicsAsync(
@@ -183,9 +198,7 @@ public sealed class MessageProcessingService : IMessageProcessingService
         foreach (var destinationTopic in routingDecision.DestinationTopics)
         {
             _logger.LogInformation(
-                "Produzione evento verso topic destinazione. EventId: {EventId}. EventType: {EventType}. DestinationTopic: {DestinationTopic}.",
-                eventEnvelope.EventId,
-                eventEnvelope.EventType,
+                "Produzione evento verso topic destinazione. DestinationTopic: {DestinationTopic}.",
                 destinationTopic);
 
             await _kafkaMessageProducer.ProduceAsync(
@@ -196,9 +209,7 @@ public sealed class MessageProcessingService : IMessageProcessingService
         }
 
         _logger.LogInformation(
-            "Evento instradato correttamente. EventId: {EventId}. EventType: {EventType}. DestinationTopics: {DestinationTopics}.",
-            eventEnvelope.EventId,
-            eventEnvelope.EventType,
+            "Evento instradato correttamente. DestinationTopics: {DestinationTopics}.",
             string.Join(", ", routingDecision.DestinationTopics));
     }
 
