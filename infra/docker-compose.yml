@@ -25,11 +25,19 @@ services:
     volumes:
       - kafka_data:/tmp/kraft-combined-logs
 
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   kafka-init-topics:
     image: apache/kafka:4.2.0
     container_name: kafka-router-init-topics
     depends_on:
-      - broker
+      broker:
+        condition: service_healthy
     entrypoint: ["/bin/bash", "-c"]
     command: >
       "
@@ -65,6 +73,14 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: rootpassword
     volumes:
       - mongodb_data:/data/db
+    healthcheck:
+      test: >
+        mongosh --username root --password rootpassword --authenticationDatabase admin
+        --eval "db.adminCommand('ping')" --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   mongo-express:
     image: mongo-express:latest
