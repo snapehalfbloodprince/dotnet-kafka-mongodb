@@ -49,9 +49,13 @@ public sealed class KafkaMessageProducer : IKafkaMessageProducer
     {
         var message = new Message<string, string>
         {
-            Key = key,
             Value = value
         };
+
+        if (key is not null)
+        {
+            message.Key = key;
+        }
 
         var deliveryResult = await _producer.ProduceAsync(
             topic,

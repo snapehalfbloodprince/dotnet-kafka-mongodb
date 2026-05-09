@@ -100,22 +100,28 @@ public sealed class DeadLetterMessageFactoryTests
     }
 
     private static ConsumeResult<string, string> CreateConsumeResult(
-        string topic,
-        int partition,
-        long offset,
-        string? key,
-        string value)
+    string topic,
+    int partition,
+    long offset,
+    string? key,
+    string value)
     {
+        var message = new Message<string, string>
+        {
+            Value = value
+        };
+
+        if (key is not null)
+        {
+            message.Key = key;
+        }
+
         return new ConsumeResult<string, string>
         {
             Topic = topic,
             Partition = new Partition(partition),
             Offset = new Offset(offset),
-            Message = new Message<string, string>
-            {
-                Key = key,
-                Value = value
-            }
+            Message = message
         };
     }
 }
