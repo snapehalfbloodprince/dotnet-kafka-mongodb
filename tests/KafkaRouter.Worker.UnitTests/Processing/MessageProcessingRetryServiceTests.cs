@@ -77,8 +77,7 @@ public sealed class MessageProcessingRetryServiceTests
             technicalRetryMaxAttempts: 3,
             technicalRetryInitialDelayInSeconds: 0,
             technicalRetryMaxDelayInSeconds: 0,
-            errorDelayInSeconds: 1,
-            allowZeroDelaysForTests: true);
+            errorDelayInSeconds: 1);
 
         // Act
         var result = await sut.ProcessWithRetryAsync(
@@ -115,8 +114,7 @@ public sealed class MessageProcessingRetryServiceTests
             technicalRetryMaxAttempts: 2,
             technicalRetryInitialDelayInSeconds: 0,
             technicalRetryMaxDelayInSeconds: 0,
-            errorDelayInSeconds: 0,
-            allowZeroDelaysForTests: true);
+            errorDelayInSeconds: 0);
 
         using var cancellationTokenSource = new CancellationTokenSource();
 
@@ -142,11 +140,10 @@ public sealed class MessageProcessingRetryServiceTests
     }
 
     private MessageProcessingRetryService CreateSut(
-        int technicalRetryMaxAttempts,
-        int technicalRetryInitialDelayInSeconds,
-        int technicalRetryMaxDelayInSeconds,
-        int errorDelayInSeconds,
-        bool allowZeroDelaysForTests = false)
+    int technicalRetryMaxAttempts,
+    int technicalRetryInitialDelayInSeconds,
+    int technicalRetryMaxDelayInSeconds,
+    int errorDelayInSeconds)
     {
         var workerOptions = Microsoft.Extensions.Options.Options.Create(new WorkerOptions
         {
