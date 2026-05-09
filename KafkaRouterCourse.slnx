@@ -3,6 +3,7 @@
     <Project Path="src/KafkaRouter.Worker/KafkaRouter.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/KafkaRouter.Worker.IntegrationTests/KafkaRouter.Worker.IntegrationTests.csproj" />
     <Project Path="tests/KafkaRouter.Worker.UnitTests/KafkaRouter.Worker.UnitTests.csproj" />
   </Folder>
 </Solution>

@@ -38,7 +38,10 @@ builder.Services.AddHostedService<Worker>();
 
 var app = builder.Build();
 
-await InitializeMongoDbAsync(app.Services);
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    await InitializeMongoDbAsync(app.Services);
+}
 
 app.MapGet("/health/live", (
     IOptions<WorkerOptions> workerOptions) =>
@@ -118,3 +121,5 @@ static async Task InitializeMongoDbAsync(IServiceProvider serviceProvider)
         throw;
     }
 }
+
+public partial class Program;
