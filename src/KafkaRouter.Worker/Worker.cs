@@ -48,11 +48,12 @@ public sealed class Worker : BackgroundService
                         stoppingToken);
 
                     _logger.LogInformation(
-                        "Processamento messaggio completato. Outcome: {Outcome}. EventId: {EventId}. EventType: {EventType}. CorrelationId: {CorrelationId}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}.",
+                        "Processamento messaggio completato. Outcome: {Outcome}. EventId: {EventId}. EventType: {EventType}. CorrelationId: {CorrelationId}. ProcessingDurationMs: {ProcessingDurationMs}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}.",
                         processingResult.Outcome,
                         processingResult.EventId,
                         processingResult.EventType,
                         processingResult.CorrelationId,
+                        processingResult.ProcessingDurationMs,
                         consumeResult.Topic,
                         consumeResult.Partition.Value,
                         consumeResult.Offset.Value);

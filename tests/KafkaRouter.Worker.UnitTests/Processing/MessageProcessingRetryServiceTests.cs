@@ -22,7 +22,8 @@ public sealed class MessageProcessingRetryServiceTests
         var expectedResult = MessageProcessingResult.ProcessedSuccessfully(
             eventId: "event-001",
             eventType: "CustomerCreated",
-            correlationId: "correlation-001");
+            correlationId: "correlation-001",
+            processingDurationMs: 12);
 
         _messageProcessingServiceMock
             .Setup(service => service.ProcessAsync(
@@ -64,7 +65,8 @@ public sealed class MessageProcessingRetryServiceTests
         var expectedResult = MessageProcessingResult.ProcessedSuccessfully(
             eventId: "event-001",
             eventType: "CustomerCreated",
-            correlationId: "correlation-001");
+            correlationId: "correlation-001",
+            processingDurationMs: 12);
 
         _messageProcessingServiceMock
             .SetupSequence(service => service.ProcessAsync(

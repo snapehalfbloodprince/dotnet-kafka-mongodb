@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Confluent.Kafka;
 using KafkaRouter.Worker.DeadLetter;
 using KafkaRouter.Worker.Kafka;
@@ -50,6 +51,8 @@ public sealed class MessageProcessingService : IMessageProcessingService
         ConsumeResult<string, string> consumeResult,
         CancellationToken cancellationToken)
     {
+        var stopwatch = Stopwatch.StartNew();
+
         var context = ProcessingContext.FromConsumeResult(consumeResult);
 
         using var initialScope = _logger.BeginProcessingScope(context);
@@ -62,12 +65,14 @@ public sealed class MessageProcessingService : IMessageProcessingService
         {
             var errorCode = parseResult.ErrorCode ?? "PARSE_ERROR";
             var errorMessage = parseResult.ErrorMessage ?? "Errore non specificato durante il parsing del messaggio.";
+            var processingDurationMs = stopwatch.ElapsedMilliseconds;
 
             await ProduceToDeadLetterTopicAsync(
                 consumeResult,
                 errorCode,
                 errorMessage,
                 eventEnvelope: null,
+                processingDurationMs,
                 cancellationToken);
 
             _kafkaMessageConsumer.Commit(consumeResult);
@@ -75,12 +80,14 @@ public sealed class MessageProcessingService : IMessageProcessingService
             LogApplicationFailureHandled(
                 consumeResult,
                 errorCode,
-                errorMessage);
+                errorMessage,
+                processingDurationMs);
 
             return MessageProcessingResult.SentToDeadLetter(
                 eventId: null,
                 eventType: null,
                 correlationId: context.GetEffectiveCorrelationId(),
+                processingDurationMs,
                 errorCode,
                 errorMessage);
         }
@@ -100,24 +107,29 @@ public sealed class MessageProcessingService : IMessageProcessingService
 
         if (alreadyProcessed)
         {
+            var processingDurationMs = stopwatch.ElapsedMilliseconds;
+
             _workerMetrics.IncrementDuplicateMessages(
                 eventEnvelope.EventId!,
-                eventEnvelope.EventType!);
+                eventEnvelope.EventType!,
+                processingDurationMs);
 
             _logger.LogWarning(
-                "Messaggio duplicato rilevato. EventId: {EventId}. EventType: {EventType}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}. Il messaggio non verrà riprodotto sui topic di destinazione.",
+                "Messaggio duplicato rilevato. EventId: {EventId}. EventType: {EventType}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}. ProcessingDurationMs: {ProcessingDurationMs}. Il messaggio non verrà riprodotto sui topic di destinazione.",
                 eventEnvelope.EventId,
                 eventEnvelope.EventType,
                 consumeResult.Topic,
                 consumeResult.Partition.Value,
-                consumeResult.Offset.Value);
+                consumeResult.Offset.Value,
+                processingDurationMs);
 
             _kafkaMessageConsumer.Commit(consumeResult);
 
             return MessageProcessingResult.SkippedAsDuplicate(
                 eventEnvelope.EventId!,
                 eventEnvelope.EventType!,
-                eventEnvelope.CorrelationId);
+                eventEnvelope.CorrelationId,
+                processingDurationMs);
         }
 
         var routingDecision = await _eventRoutingService.GetRoutingDecisionAsync(
@@ -128,12 +140,14 @@ public sealed class MessageProcessingService : IMessageProcessingService
         {
             var errorCode = routingDecision.ErrorCode ?? "ROUTING_ERROR";
             var errorMessage = routingDecision.ErrorMessage ?? "Errore non specificato durante il routing del messaggio.";
+            var processingDurationMs = stopwatch.ElapsedMilliseconds;
 
             await ProduceToDeadLetterTopicAsync(
                 consumeResult,
                 errorCode,
                 errorMessage,
                 eventEnvelope,
+                processingDurationMs,
                 cancellationToken);
 
             _kafkaMessageConsumer.Commit(consumeResult);
@@ -141,12 +155,14 @@ public sealed class MessageProcessingService : IMessageProcessingService
             LogApplicationFailureHandled(
                 consumeResult,
                 errorCode,
-                errorMessage);
+                errorMessage,
+                processingDurationMs);
 
             return MessageProcessingResult.SentToDeadLetter(
                 eventEnvelope.EventId,
                 eventEnvelope.EventType,
                 eventEnvelope.CorrelationId,
+                processingDurationMs,
                 errorCode,
                 errorMessage);
         }
@@ -173,16 +189,27 @@ public sealed class MessageProcessingService : IMessageProcessingService
                 eventEnvelope.EventId);
         }
 
+        var successfulProcessingDurationMs = stopwatch.ElapsedMilliseconds;
+
         _workerMetrics.IncrementProcessedMessages(
             eventEnvelope.EventId!,
-            eventEnvelope.EventType!);
+            eventEnvelope.EventType!,
+            successfulProcessingDurationMs);
 
         _kafkaMessageConsumer.Commit(consumeResult);
+
+        _logger.LogInformation(
+            "Messaggio processato correttamente. EventId: {EventId}. EventType: {EventType}. DestinationTopics: {DestinationTopics}. ProcessingDurationMs: {ProcessingDurationMs}.",
+            eventEnvelope.EventId,
+            eventEnvelope.EventType,
+            string.Join(", ", routingDecision.DestinationTopics),
+            successfulProcessingDurationMs);
 
         return MessageProcessingResult.ProcessedSuccessfully(
             eventEnvelope.EventId!,
             eventEnvelope.EventType!,
-            eventEnvelope.CorrelationId);
+            eventEnvelope.CorrelationId,
+            successfulProcessingDurationMs);
     }
 
     private async Task ProduceToDestinationTopicsAsync(
@@ -218,6 +245,7 @@ public sealed class MessageProcessingService : IMessageProcessingService
         string errorCode,
         string errorMessage,
         EventEnvelope? eventEnvelope,
+        long processingDurationMs,
         CancellationToken cancellationToken)
     {
         var deadLetterPayload = _deadLetterMessageFactory.CreateDeadLetterPayload(
@@ -231,18 +259,20 @@ public sealed class MessageProcessingService : IMessageProcessingService
             ?? $"{consumeResult.Topic}-{consumeResult.Partition.Value}-{consumeResult.Offset.Value}";
 
         _logger.LogWarning(
-            "Messaggio inviato in DLQ. ErrorCode: {ErrorCode}. ErrorMessage: {ErrorMessage}. DeadLetterTopic: {DeadLetterTopic}. OriginalTopic: {OriginalTopic}. OriginalPartition: {OriginalPartition}. OriginalOffset: {OriginalOffset}.",
+            "Messaggio inviato in DLQ. ErrorCode: {ErrorCode}. ErrorMessage: {ErrorMessage}. DeadLetterTopic: {DeadLetterTopic}. OriginalTopic: {OriginalTopic}. OriginalPartition: {OriginalPartition}. OriginalOffset: {OriginalOffset}. ProcessingDurationMs: {ProcessingDurationMs}.",
             errorCode,
             errorMessage,
             _kafkaOptions.DeadLetterTopic,
             consumeResult.Topic,
             consumeResult.Partition.Value,
-            consumeResult.Offset.Value);
+            consumeResult.Offset.Value,
+            processingDurationMs);
 
         _workerMetrics.IncrementDeadLetterMessages(
             eventEnvelope?.EventId,
             eventEnvelope?.EventType,
-            errorCode);
+            errorCode,
+            processingDurationMs);
 
         await _kafkaMessageProducer.ProduceAsync(
             _kafkaOptions.DeadLetterTopic,
@@ -271,15 +301,17 @@ public sealed class MessageProcessingService : IMessageProcessingService
     private void LogApplicationFailureHandled(
         ConsumeResult<string, string> consumeResult,
         string errorCode,
-        string errorMessage)
+        string errorMessage,
+        long processingDurationMs)
     {
         _logger.LogWarning(
-            "Errore applicativo gestito con DLQ e commit. ErrorCode: {ErrorCode}. ErrorMessage: {ErrorMessage}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}.",
+            "Errore applicativo gestito con DLQ e commit. ErrorCode: {ErrorCode}. ErrorMessage: {ErrorMessage}. Topic: {Topic}. Partition: {Partition}. Offset: {Offset}. ProcessingDurationMs: {ProcessingDurationMs}.",
             errorCode,
             errorMessage,
             consumeResult.Topic,
             consumeResult.Partition.Value,
-            consumeResult.Offset.Value);
+            consumeResult.Offset.Value,
+            processingDurationMs);
     }
 
     private static string? GetEffectiveMessageKey(

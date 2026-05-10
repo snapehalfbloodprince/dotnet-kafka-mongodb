@@ -22,6 +22,8 @@ public sealed class WorkerMetricsSnapshot
 
     public DateTimeOffset? LastProcessedAt { get; init; }
 
+    public long? LastProcessedDurationMs { get; init; }
+
     public string? LastDeadLetterEventId { get; init; }
 
     public string? LastDeadLetterEventType { get; init; }
@@ -30,13 +32,23 @@ public sealed class WorkerMetricsSnapshot
 
     public DateTimeOffset? LastDeadLetterAt { get; init; }
 
+    public long? LastDeadLetterDurationMs { get; init; }
+
     public string? LastDuplicateEventId { get; init; }
 
     public string? LastDuplicateEventType { get; init; }
 
     public DateTimeOffset? LastDuplicateAt { get; init; }
 
+    public long? LastDuplicateDurationMs { get; init; }
+
     public string? LastTechnicalFailureCategory { get; init; }
 
     public DateTimeOffset? LastTechnicalFailureAt { get; init; }
+
+    public long TotalProcessingDurationMs { get; init; }
+
+    public long? AverageProcessingDurationMs { get; init; }
+
+    public long? MaxProcessingDurationMs { get; init; }
 }

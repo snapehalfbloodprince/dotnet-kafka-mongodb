@@ -28,6 +28,13 @@ public sealed class InMemoryWorkerMetricsTests
         snapshot.LastTechnicalFailureCategory.Should().BeNull();
 
         snapshot.StartedAt.Should().BeOnOrBefore(snapshot.CheckedAt);
+        snapshot.TotalProcessingDurationMs.Should().Be(0);
+        snapshot.AverageProcessingDurationMs.Should().BeNull();
+        snapshot.MaxProcessingDurationMs.Should().BeNull();
+
+        snapshot.LastProcessedDurationMs.Should().BeNull();
+        snapshot.LastDeadLetterDurationMs.Should().BeNull();
+        snapshot.LastDuplicateDurationMs.Should().BeNull();
     }
 
     [Fact]
@@ -39,7 +46,8 @@ public sealed class InMemoryWorkerMetricsTests
         // Act
         sut.IncrementProcessedMessages(
             eventId: "event-001",
-            eventType: "CustomerCreated");
+            eventType: "CustomerCreated",
+            processingDurationMs: 15);
 
         var snapshot = sut.GetSnapshot();
 
@@ -48,6 +56,10 @@ public sealed class InMemoryWorkerMetricsTests
         snapshot.LastProcessedEventId.Should().Be("event-001");
         snapshot.LastProcessedEventType.Should().Be("CustomerCreated");
         snapshot.LastProcessedAt.Should().NotBeNull();
+        snapshot.LastProcessedDurationMs.Should().Be(15);
+        snapshot.TotalProcessingDurationMs.Should().Be(15);
+        snapshot.AverageProcessingDurationMs.Should().Be(15);
+        snapshot.MaxProcessingDurationMs.Should().Be(15);
     }
 
     [Fact]
@@ -60,7 +72,8 @@ public sealed class InMemoryWorkerMetricsTests
         sut.IncrementDeadLetterMessages(
             eventId: "event-001",
             eventType: "UnknownEvent",
-            errorCode: "ROUTING_RULE_NOT_FOUND");
+            errorCode: "ROUTING_RULE_NOT_FOUND",
+            processingDurationMs: 20);
 
         var snapshot = sut.GetSnapshot();
 
@@ -70,6 +83,10 @@ public sealed class InMemoryWorkerMetricsTests
         snapshot.LastDeadLetterEventType.Should().Be("UnknownEvent");
         snapshot.LastDeadLetterErrorCode.Should().Be("ROUTING_RULE_NOT_FOUND");
         snapshot.LastDeadLetterAt.Should().NotBeNull();
+        snapshot.LastDeadLetterDurationMs.Should().Be(20);
+        snapshot.TotalProcessingDurationMs.Should().Be(20);
+        snapshot.AverageProcessingDurationMs.Should().Be(20);
+        snapshot.MaxProcessingDurationMs.Should().Be(20);
     }
 
     [Fact]
@@ -81,7 +98,8 @@ public sealed class InMemoryWorkerMetricsTests
         // Act
         sut.IncrementDuplicateMessages(
             eventId: "event-001",
-            eventType: "CustomerCreated");
+            eventType: "CustomerCreated",
+            processingDurationMs: 5);
 
         var snapshot = sut.GetSnapshot();
 
@@ -90,6 +108,10 @@ public sealed class InMemoryWorkerMetricsTests
         snapshot.LastDuplicateEventId.Should().Be("event-001");
         snapshot.LastDuplicateEventType.Should().Be("CustomerCreated");
         snapshot.LastDuplicateAt.Should().NotBeNull();
+        snapshot.LastDuplicateDurationMs.Should().Be(5);
+        snapshot.TotalProcessingDurationMs.Should().Be(5);
+        snapshot.AverageProcessingDurationMs.Should().Be(5);
+        snapshot.MaxProcessingDurationMs.Should().Be(5);
     }
 
     [Fact]
@@ -116,10 +138,10 @@ public sealed class InMemoryWorkerMetricsTests
         var sut = CreateSut("worker-test");
 
         // Act
-        sut.IncrementProcessedMessages("event-001", "CustomerCreated");
-        sut.IncrementProcessedMessages("event-002", "InvoicePaid");
-        sut.IncrementDeadLetterMessages("event-003", "UnknownEvent", "ROUTING_RULE_NOT_FOUND");
-        sut.IncrementDuplicateMessages("event-001", "CustomerCreated");
+        sut.IncrementProcessedMessages("event-001", "CustomerCreated", 10);
+        sut.IncrementProcessedMessages("event-002", "InvoicePaid", 20);
+        sut.IncrementDeadLetterMessages("event-003", "UnknownEvent", "ROUTING_RULE_NOT_FOUND", 30);
+        sut.IncrementDuplicateMessages("event-001", "CustomerCreated", 40);
         sut.IncrementTechnicalFailures("KAFKA_ERROR");
         sut.IncrementTechnicalFailures("MONGO_ERROR");
 
@@ -133,6 +155,9 @@ public sealed class InMemoryWorkerMetricsTests
 
         snapshot.LastProcessedEventId.Should().Be("event-002");
         snapshot.LastTechnicalFailureCategory.Should().Be("MONGO_ERROR");
+        snapshot.TotalProcessingDurationMs.Should().Be(100);
+        snapshot.AverageProcessingDurationMs.Should().Be(25);
+        snapshot.MaxProcessingDurationMs.Should().Be(40);
     }
 
     private static InMemoryWorkerMetrics CreateSut(string instanceName)

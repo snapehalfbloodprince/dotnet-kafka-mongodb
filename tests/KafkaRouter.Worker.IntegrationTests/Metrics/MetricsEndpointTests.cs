@@ -32,5 +32,9 @@ public sealed class MetricsEndpointTests
         root.GetProperty("deadLetterMessages").GetInt64().Should().Be(0);
         root.GetProperty("duplicateMessages").GetInt64().Should().Be(0);
         root.GetProperty("technicalFailures").GetInt64().Should().Be(0);
+
+        root.GetProperty("totalProcessingDurationMs").GetInt64().Should().Be(0);
+        root.GetProperty("averageProcessingDurationMs").ValueKind.Should().Be(JsonValueKind.Null);
+        root.GetProperty("maxProcessingDurationMs").ValueKind.Should().Be(JsonValueKind.Null);
     }
 }

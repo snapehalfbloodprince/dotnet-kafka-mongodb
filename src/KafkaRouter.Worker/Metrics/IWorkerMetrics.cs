@@ -4,19 +4,21 @@ public interface IWorkerMetrics
 {
     void IncrementProcessedMessages(
         string eventId,
-        string eventType);
+        string eventType,
+        long processingDurationMs);
 
     void IncrementDeadLetterMessages(
         string? eventId,
         string? eventType,
-        string errorCode);
+        string errorCode,
+        long processingDurationMs);
 
     void IncrementDuplicateMessages(
         string eventId,
-        string eventType);
+        string eventType,
+        long processingDurationMs);
 
-    void IncrementTechnicalFailures(
-        string errorCategory);
+    void IncrementTechnicalFailures(string errorCategory);
 
     WorkerMetricsSnapshot GetSnapshot();
 }

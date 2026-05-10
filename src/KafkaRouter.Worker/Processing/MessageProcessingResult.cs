@@ -7,6 +7,7 @@ public sealed class MessageProcessingResult
         string? eventId,
         string? eventType,
         string? correlationId,
+        long processingDurationMs,
         string? errorCode,
         string? errorMessage)
     {
@@ -14,6 +15,7 @@ public sealed class MessageProcessingResult
         EventId = eventId;
         EventType = eventType;
         CorrelationId = correlationId;
+        ProcessingDurationMs = processingDurationMs;
         ErrorCode = errorCode;
         ErrorMessage = errorMessage;
     }
@@ -25,6 +27,8 @@ public sealed class MessageProcessingResult
     public string? EventType { get; }
 
     public string? CorrelationId { get; }
+
+    public long ProcessingDurationMs { get; }
 
     public string? ErrorCode { get; }
 
@@ -39,13 +43,15 @@ public sealed class MessageProcessingResult
     public static MessageProcessingResult ProcessedSuccessfully(
         string eventId,
         string eventType,
-        string? correlationId)
+        string? correlationId,
+        long processingDurationMs)
     {
         return new MessageProcessingResult(
             MessageProcessingOutcome.ProcessedSuccessfully,
             eventId,
             eventType,
             correlationId,
+            processingDurationMs,
             errorCode: null,
             errorMessage: null);
     }
@@ -54,6 +60,7 @@ public sealed class MessageProcessingResult
         string? eventId,
         string? eventType,
         string? correlationId,
+        long processingDurationMs,
         string errorCode,
         string errorMessage)
     {
@@ -62,6 +69,7 @@ public sealed class MessageProcessingResult
             eventId,
             eventType,
             correlationId,
+            processingDurationMs,
             errorCode,
             errorMessage);
     }
@@ -69,13 +77,15 @@ public sealed class MessageProcessingResult
     public static MessageProcessingResult SkippedAsDuplicate(
         string eventId,
         string eventType,
-        string? correlationId)
+        string? correlationId,
+        long processingDurationMs)
     {
         return new MessageProcessingResult(
             MessageProcessingOutcome.SkippedAsDuplicate,
             eventId,
             eventType,
             correlationId,
+            processingDurationMs,
             errorCode: null,
             errorMessage: null);
     }

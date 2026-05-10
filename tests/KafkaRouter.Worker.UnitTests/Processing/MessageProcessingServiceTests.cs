@@ -121,12 +121,14 @@ public sealed class MessageProcessingServiceTests
         _workerMetricsMock.Verify(
             metrics => metrics.IncrementProcessedMessages(
                 "event-valid-001",
-                "CustomerCreated"),
+                "CustomerCreated",
+                It.Is<long>(duration => duration >= 0)),
             Times.Once);
 
         _kafkaMessageConsumerMock.Verify(
             consumer => consumer.Commit(consumeResult),
             Times.Once);
+        result.ProcessingDurationMs.Should().BeGreaterThanOrEqualTo(0);
     }
 
     [Fact]
@@ -174,7 +176,8 @@ public sealed class MessageProcessingServiceTests
             metrics => metrics.IncrementDeadLetterMessages(
                 null,
                 null,
-                "INVALID_JSON"),
+                "INVALID_JSON",
+                It.Is<long>(duration => duration >= 0)),
             Times.Once);
 
         _kafkaMessageConsumerMock.Verify(
@@ -192,6 +195,8 @@ public sealed class MessageProcessingServiceTests
                 It.IsAny<ProcessedMessageDocument>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
+
+        result.ProcessingDurationMs.Should().BeGreaterThanOrEqualTo(0);
     }
 
     [Fact]
@@ -267,7 +272,8 @@ public sealed class MessageProcessingServiceTests
             metrics => metrics.IncrementDeadLetterMessages(
                 "event-routing-001",
                 "UnknownEvent",
-                "ROUTING_RULE_NOT_FOUND"),
+                "ROUTING_RULE_NOT_FOUND",
+                It.Is<long>(duration => duration >= 0)),
             Times.Once);
 
         _kafkaMessageConsumerMock.Verify(
@@ -345,7 +351,8 @@ public sealed class MessageProcessingServiceTests
         _workerMetricsMock.Verify(
             metrics => metrics.IncrementDuplicateMessages(
                 "event-duplicate-001",
-                "CustomerCreated"),
+                "CustomerCreated",
+                It.Is<long>(duration => duration >= 0)),
             Times.Once);
 
         _kafkaMessageConsumerMock.Verify(
@@ -421,7 +428,8 @@ public sealed class MessageProcessingServiceTests
         _workerMetricsMock.Verify(
             metrics => metrics.IncrementProcessedMessages(
                 It.IsAny<string>(),
-                It.IsAny<string>()),
+                It.IsAny<string>(),
+                It.IsAny<long>()),
             Times.Never);
     }
 
