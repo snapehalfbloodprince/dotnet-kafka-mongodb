@@ -102,15 +102,16 @@ services:
       dockerfile: src/KafkaRouter.Worker/Dockerfile
     image: kafka-router-worker:local
     restart: unless-stopped
+    stop_grace_period: 40s
     depends_on:
       kafka-init-topics:
         condition: service_completed_successfully
       mongodb:
-        condition: service_started
+        condition: service_healthy
     expose:
       - "8080"
     environment:
-      DOTNET_ENVIRONMENT: Development
+      DOTNET_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://0.0.0.0:8080
 
       Kafka__BootstrapServers: broker:19092
@@ -129,6 +130,7 @@ services:
       Worker__TechnicalRetryMaxAttempts: 3
       Worker__TechnicalRetryInitialDelayInSeconds: 1
       Worker__TechnicalRetryMaxDelayInSeconds: 10
+      Worker__ShutdownTimeoutInSeconds: 30
 
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]

@@ -19,7 +19,8 @@ public sealed class WorkerOptionsValidatorTests
             ConsecutiveFailuresWarningThreshold = 5,
             TechnicalRetryMaxAttempts = 3,
             TechnicalRetryInitialDelayInSeconds = 1,
-            TechnicalRetryMaxDelayInSeconds = 10
+            TechnicalRetryMaxDelayInSeconds = 10,
+            ShutdownTimeoutInSeconds = 30
         };
 
         // Act
@@ -41,7 +42,8 @@ public sealed class WorkerOptionsValidatorTests
             ConsecutiveFailuresWarningThreshold = 5,
             TechnicalRetryMaxAttempts = 3,
             TechnicalRetryInitialDelayInSeconds = 10,
-            TechnicalRetryMaxDelayInSeconds = 1
+            TechnicalRetryMaxDelayInSeconds = 1,
+            ShutdownTimeoutInSeconds = 0
         };
 
         // Act
@@ -51,6 +53,7 @@ public sealed class WorkerOptionsValidatorTests
         result.Failed.Should().BeTrue();
         result.Failures.Should().Contain(
             "Worker:TechnicalRetryMaxDelayInSeconds deve essere maggiore o uguale a Worker:TechnicalRetryInitialDelayInSeconds.");
+        result.Failures.Should().Contain(error => error.Contains("ShutdownTimeoutInSeconds"));
     }
 
     [Fact]
@@ -64,7 +67,8 @@ public sealed class WorkerOptionsValidatorTests
             ConsecutiveFailuresWarningThreshold = 0,
             TechnicalRetryMaxAttempts = 0,
             TechnicalRetryInitialDelayInSeconds = 0,
-            TechnicalRetryMaxDelayInSeconds = 0
+            TechnicalRetryMaxDelayInSeconds = 0,
+            ShutdownTimeoutInSeconds = 0
         };
 
         // Act
@@ -77,5 +81,6 @@ public sealed class WorkerOptionsValidatorTests
         result.Failures.Should().Contain(error => error.Contains("ErrorDelayInSeconds"));
         result.Failures.Should().Contain(error => error.Contains("ConsecutiveFailuresWarningThreshold"));
         result.Failures.Should().Contain(error => error.Contains("TechnicalRetryMaxAttempts"));
+        result.Failures.Should().Contain(error => error.Contains("ShutdownTimeoutInSeconds"));
     }
 }

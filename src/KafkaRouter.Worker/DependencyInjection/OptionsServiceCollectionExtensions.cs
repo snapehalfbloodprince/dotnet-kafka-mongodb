@@ -11,6 +11,11 @@ public static class OptionsServiceCollectionExtensions
         IConfiguration configuration)
     {
         services
+            .AddOptions<ApplicationOptions>()
+            .Bind(configuration.GetSection(ApplicationOptions.SectionName))
+            .ValidateOnStart();
+
+        services
             .AddOptions<WorkerOptions>()
             .Bind(configuration.GetSection(WorkerOptions.SectionName))
             .ValidateOnStart();
@@ -25,6 +30,7 @@ public static class OptionsServiceCollectionExtensions
             .Bind(configuration.GetSection(MongoDbOptions.SectionName))
             .ValidateOnStart();
 
+        services.AddSingleton<IValidateOptions<ApplicationOptions>, ApplicationOptionsValidator>();
         services.AddSingleton<IValidateOptions<WorkerOptions>, WorkerOptionsValidator>();
         services.AddSingleton<IValidateOptions<KafkaOptions>, KafkaOptionsValidator>();
         services.AddSingleton<IValidateOptions<MongoDbOptions>, MongoDbOptionsValidator>();

@@ -16,6 +16,16 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddValidatedOptions(builder.Configuration);
 
+builder.Services.Configure<HostOptions>(options =>
+{
+    var workerOptions = builder.Configuration
+        .GetSection(WorkerOptions.SectionName)
+        .Get<WorkerOptions>() ?? new WorkerOptions();
+
+    options.ShutdownTimeout = TimeSpan.FromSeconds(
+        workerOptions.ShutdownTimeoutInSeconds);
+});
+
 builder.Services.AddSingleton<IKafkaMessageConsumer, KafkaMessageConsumer>();
 builder.Services.AddSingleton<IKafkaMessageProducer, KafkaMessageProducer>();
 
@@ -44,6 +54,7 @@ if (!app.Environment.IsEnvironment("Testing"))
 }
 
 app.MapGet("/health/live", (
+    IOptions<ApplicationOptions> applicationOptions,
     IOptions<WorkerOptions> workerOptions) =>
 {
     var response = new HealthResponse
@@ -53,6 +64,8 @@ app.MapGet("/health/live", (
         CheckedAt = DateTimeOffset.UtcNow,
         Checks = new Dictionary<string, string>
         {
+            ["application"] = applicationOptions.Value.Name,
+            ["environment"] = applicationOptions.Value.Environment,
             ["process"] = "Healthy"
         }
     };
@@ -61,33 +74,34 @@ app.MapGet("/health/live", (
 });
 
 app.MapGet("/health/ready", async (
+    IOptions<ApplicationOptions> applicationOptions,
+    IOptions<WorkerOptions> workerOptions,
     IKafkaHealthCheckService kafkaHealthCheckService,
     IMongoDbHealthCheckService mongoDbHealthCheckService,
-    IOptions<WorkerOptions> workerOptions,
     CancellationToken cancellationToken) =>
 {
     var kafkaHealthy = await kafkaHealthCheckService.IsHealthyAsync(cancellationToken);
     var mongoDbHealthy = await mongoDbHealthCheckService.IsHealthyAsync(cancellationToken);
 
-    var allHealthy = kafkaHealthy && mongoDbHealthy;
+    var isHealthy = kafkaHealthy && mongoDbHealthy;
 
     var response = new HealthResponse
     {
-        Status = allHealthy ? "Healthy" : "Unhealthy",
+        Status = isHealthy ? "Healthy" : "Unhealthy",
         InstanceName = workerOptions.Value.InstanceName,
         CheckedAt = DateTimeOffset.UtcNow,
         Checks = new Dictionary<string, string>
         {
+            ["application"] = applicationOptions.Value.Name,
+            ["environment"] = applicationOptions.Value.Environment,
             ["kafka"] = kafkaHealthy ? "Healthy" : "Unhealthy",
             ["mongodb"] = mongoDbHealthy ? "Healthy" : "Unhealthy"
         }
     };
 
-    return allHealthy
+    return isHealthy
         ? Results.Ok(response)
-        : Results.Json(
-            response,
-            statusCode: StatusCodes.Status503ServiceUnavailable);
+        : Results.Json(response, statusCode: StatusCodes.Status503ServiceUnavailable);
 });
 
 app.MapGet("/metrics", (

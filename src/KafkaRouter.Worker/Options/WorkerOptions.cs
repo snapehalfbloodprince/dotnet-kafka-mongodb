@@ -15,4 +15,6 @@ public sealed class WorkerOptions
     public int TechnicalRetryInitialDelayInSeconds { get; init; } = 1;
 
     public int TechnicalRetryMaxDelayInSeconds { get; init; } = 10;
+
+    public int ShutdownTimeoutInSeconds { get; init; } = 30;
 }

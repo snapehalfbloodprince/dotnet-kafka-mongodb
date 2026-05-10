@@ -91,7 +91,8 @@ public sealed class Worker : BackgroundService
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            _logger.LogInformation("Richiesta di arresto ricevuta.");
+            _logger.LogInformation(
+                "Richiesta di arresto ricevuta. Il Worker interromperà il consumo di nuovi messaggi.");
         }
         finally
         {

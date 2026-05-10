@@ -29,7 +29,12 @@ public sealed class HealthEndpointTests
 
         root.GetProperty("status").GetString().Should().Be("Healthy");
         root.GetProperty("instanceName").GetString().Should().NotBeNullOrWhiteSpace();
-        root.GetProperty("checks").GetProperty("process").GetString().Should().Be("Healthy");
+
+        var checks = root.GetProperty("checks");
+
+        checks.GetProperty("application").GetString().Should().Be("KafkaRouter.Worker");
+        checks.GetProperty("environment").GetString().Should().Be("Testing");
+        checks.GetProperty("process").GetString().Should().Be("Healthy");
     }
 
     [Fact]

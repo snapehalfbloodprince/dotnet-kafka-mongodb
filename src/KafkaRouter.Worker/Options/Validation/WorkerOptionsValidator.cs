@@ -45,6 +45,11 @@ public sealed class WorkerOptionsValidator : IValidateOptions<WorkerOptions>
             errors.Add("Worker:TechnicalRetryMaxDelayInSeconds deve essere maggiore o uguale a Worker:TechnicalRetryInitialDelayInSeconds.");
         }
 
+        if (options.ShutdownTimeoutInSeconds <= 0)
+        {
+            errors.Add("Worker:ShutdownTimeoutInSeconds deve essere maggiore di zero.");
+        }
+
         return errors.Count == 0
             ? ValidateOptionsResult.Success
             : ValidateOptionsResult.Fail(errors);

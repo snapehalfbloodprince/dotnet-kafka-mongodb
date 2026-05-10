@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Moq;
+using Microsoft.Extensions.Configuration;
 
 namespace KafkaRouter.Worker.IntegrationTests.Infrastructure;
 
@@ -28,6 +29,16 @@ public sealed class KafkaRouterWebApplicationFactory : WebApplicationFactory<Pro
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+
+        builder.ConfigureAppConfiguration((_, configurationBuilder) =>
+        {
+            var configurationOverrides = new Dictionary<string, string?>
+            {
+                ["Application:Environment"] = "Testing"
+            };
+
+            configurationBuilder.AddInMemoryCollection(configurationOverrides);
+        });
 
         builder.ConfigureServices(services =>
         {
