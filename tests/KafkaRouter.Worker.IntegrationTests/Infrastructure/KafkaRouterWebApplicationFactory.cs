@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Moq;
 using Microsoft.Extensions.Configuration;
+using KafkaRouter.Worker.MongoDb.Documents;
 
 namespace KafkaRouter.Worker.IntegrationTests.Infrastructure;
 
@@ -82,7 +83,31 @@ public sealed class KafkaRouterWebApplicationFactory : WebApplicationFactory<Pro
 
     private static Mock<IRoutingRuleRepository> CreateRoutingRuleRepositoryMock()
     {
-        return new Mock<IRoutingRuleRepository>();
+        var mock = new Mock<IRoutingRuleRepository>();
+
+        mock.Setup(repository => repository.GetEnabledRulesAsync(
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<RoutingRuleDocument>
+            {
+            new()
+            {
+                EventType = "CustomerCreated",
+                DestinationTopics = new[] { "events.crm" },
+                IsEnabled = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            },
+            new()
+            {
+                EventType = "InvoicePaid",
+                DestinationTopics = new[] { "events.billing", "events.notifications" },
+                IsEnabled = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            }
+            });
+
+        return mock;
     }
 
     private static Mock<IProcessedMessageRepository> CreateProcessedMessageRepositoryMock()

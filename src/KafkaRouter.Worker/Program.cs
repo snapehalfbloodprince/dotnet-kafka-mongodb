@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using KafkaRouter.Worker.Metrics;
 using KafkaRouter.Worker.Processing;
 using KafkaRouter.Worker.DependencyInjection;
+using KafkaRouter.Worker.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -111,6 +112,8 @@ app.MapGet("/metrics", (
 
     return Results.Ok(snapshot);
 });
+
+app.MapDiagnosticEndpoints();
 
 await app.RunAsync();
 
