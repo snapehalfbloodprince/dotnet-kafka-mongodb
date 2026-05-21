@@ -1,5 +1,11 @@
 # Kafka Router Worker - Architecture Review
 
+Related documents:
+
+- [Course Book](./CourseBook.md)
+- [Operational Runbook](./Runbook.md)
+- [Production Readiness Checklist](./ProductionReadinessChecklist.md)
+
 ## 1. Purpose
 
 Kafka Router Worker is a horizontally scalable .NET Worker service that consumes events from a Kafka inbound topic, determines destination topics through MongoDB routing rules, produces routed messages to Kafka, and stores processed messages to support idempotency.

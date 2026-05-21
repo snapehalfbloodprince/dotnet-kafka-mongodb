@@ -2,6 +2,7 @@
 
 Related documents:
 
+- [Course Book](./CourseBook.md)
 - [Architecture Review](./ArchitectureReview.md)
 - [Production Readiness Checklist](./ProductionReadinessChecklist.md)
 
