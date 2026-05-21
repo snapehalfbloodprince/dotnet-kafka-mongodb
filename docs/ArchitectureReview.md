@@ -5,6 +5,7 @@ Related documents:
 - [Course Book](./CourseBook.md)
 - [Operational Runbook](./Runbook.md)
 - [Production Readiness Checklist](./ProductionReadinessChecklist.md)
+- [Final Review](./FinalReview.md)
 
 ## 1. Purpose
 

@@ -5,6 +5,7 @@ Related documents:
 - [Course Book](./CourseBook.md)
 - [Operational Runbook](./Runbook.md)
 - [Architecture Review](./ArchitectureReview.md)
+- [Final Review](./FinalReview.md)
 
 ## 1. Purpose
 
