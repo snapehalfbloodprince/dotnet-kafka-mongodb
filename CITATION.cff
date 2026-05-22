@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this project, please cite it as below."
+title: "Kafka Router Worker"
+authors:
+  - family-names: "Piga"
+    given-names: "Francesco Paolo"
+repository-code: "https://github.com/snapehalfbloodprince/dotnet-kafka-mongodb"
+license: "MIT"
+date-released: 2026-05-22
